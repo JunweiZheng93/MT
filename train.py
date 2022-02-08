@@ -29,6 +29,10 @@ def train_model(category='chair',
                 d_model=256,
                 which_gpu=0):
 
+    # disable warning and info message, only enable error message
+    tf.get_logger().setLevel('ERROR')
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
     _configure_gpu(which_gpu)
     _save_necessary_scripts(RESULT_PATH)
 
