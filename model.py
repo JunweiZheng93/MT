@@ -105,7 +105,8 @@ class SharedPartDecoder(keras.layers.Layer):
         # self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
         # self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1), activation='sigmoid')
         self.deconv4 = layers.Conv3DTranspose(16, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
-        self.deconv5 = layers.Conv3D(1, 5, (1, 1, 1), padding='same', activation='sigmoid')
+        # self.deconv5 = layers.Conv3D(1, 5, (1, 1, 1), padding='same', activation='sigmoid')
+        self.deconv5 = layers.Conv3DTranspose(1, 5, (1, 1, 1), padding='same', activation='sigmoid')
 
         self.act = layers.LeakyReLU()
         self.act1 = layers.LeakyReLU()
