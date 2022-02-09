@@ -102,8 +102,10 @@ class SharedPartDecoder(keras.layers.Layer):
         self.deconv1 = layers.Conv3DTranspose(128, 3, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
         self.deconv2 = layers.Conv3DTranspose(64, 3, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
         self.deconv3 = layers.Conv3DTranspose(32, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
-        self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
-        self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1), activation='sigmoid')
+        # self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
+        # self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1), activation='sigmoid')
+        self.deconv4 = layers.Conv3DTranspose(16, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
+        self.deconv5 = layers.Conv3D(1, 5, (1, 1, 1), padding='same', activation='sigmoid')
 
         self.act = layers.LeakyReLU()
         self.act1 = layers.LeakyReLU()
@@ -154,6 +156,7 @@ class SharedPartDecoder(keras.layers.Layer):
         x = self.bn4(self.out5, training=training)
         x = self.dropout4(x, training=training)
 
+        # outputs = self.conv5(x)
         outputs = self.deconv5(x)
 
         return outputs
@@ -723,10 +726,12 @@ class Model(keras.Model):
                 trans_loss = self._cal_transformation_loss(trans, theta)
 
             if self.use_attention:
-                attention_grads = tape.gradient(trans_loss, [layer.trainable_weights for layer in self.attention_layer_list])
-                dense_grads = tape.gradient(trans_loss, self.dense.trainable_weights)
-                self.optimizer.apply_gradients(zip(attention_grads, [layer.trainable_weights for layer in self.attention_layer_list]))
-                self.optimizer.apply_gradients(zip(dense_grads, self.dense.trainable_weights))
+                weights_list = list()
+                for layer in self.attention_layer_list:
+                    weights_list.extend(layer.trainable_weights)
+                weights_list.extend(self.dense.trainable_weights)
+                grads = tape.gradient(trans_loss, weights_list)
+                self.optimizer.apply_gradients(zip(grads, weights_list))
             else:
                 grads = tape.gradient(trans_loss, self.localization_net.trainable_weights)
                 self.optimizer.apply_gradients(zip(grads, self.localization_net.trainable_weights))

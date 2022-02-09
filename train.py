@@ -70,20 +70,6 @@ def _configure_gpu(which_gpu):
 
 def _save_necessary_scripts(result_saved_path):
 
-    # save training notes
-    ans = input('The training will start soon. Do you want to take some notes for the training? y/n: ')
-    while True:
-        if ans == 'Y' or ans == 'yes' or ans == 'y':
-            if not os.path.exists(RESULT_PATH):
-                os.makedirs(RESULT_PATH)
-            os.system(f'vi {os.path.join(RESULT_PATH, "training_notes.txt")}')
-            print(f'training_notes.txt is saved in {RESULT_PATH}')
-            break
-        elif ans == 'N' or ans == 'no' or ans == 'n':
-            break
-        else:
-            ans = input('Please enter y/n: ')
-
     # make directory and save __init__.py
     if not os.path.exists(result_saved_path):
         os.makedirs(result_saved_path)
