@@ -23,6 +23,7 @@ def train_model(category='chair',
                 model_path=None,
                 shuffle=True,
                 use_attention=False,
+                use_extra_loss=False,
                 which_layer='0',
                 num_blocks=6,
                 num_heads=8,
@@ -39,22 +40,22 @@ def train_model(category='chair',
     # get dataset
     training_set, test_set = dataloader.get_dataset(category=category, batch_size=batch_size, split_ratio=split_ratio, max_num_parts=max_num_parts)
     # create model
-    my_model = model.Model(max_num_parts, training_process, use_attention, which_layer, num_blocks, num_heads, d_model)
+    my_model = model.Model(max_num_parts, training_process, use_attention, use_extra_loss, which_layer, num_blocks, num_heads, d_model)
 
     if training_process == 1 or training_process == '1':
-        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 1, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
+        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 1, use_attention, use_extra_loss, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
 
     elif training_process == 2 or training_process == '2':
         warm_up_data = training_set.__iter__().__next__()[0]
         my_model(warm_up_data)
         my_model.load_weights(model_path, by_name=True)
-        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 2, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
+        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 2, use_attention, use_extra_loss, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
 
     elif training_process == 3 or training_process == '3':
         warm_up_data = training_set.__iter__().__next__()[0]
         my_model(warm_up_data)
         my_model.load_weights(model_path, by_name=True)
-        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 3, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
+        _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 3, use_attention, use_extra_loss, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
 
     else:
         raise ValueError('training_process should be one of 1, 2 and 3')
@@ -112,12 +113,26 @@ def _get_lr_scheduler(decay_rate, decay_step_size):
     return lr_scheduler
 
 
+class EvaluationCallback(tf.keras.callbacks.Callback):
+
+    def __init__(self, test_set, tb_callback):
+        self.test_set = test_set
+        self.tb_callback = tb_callback
+
+    def on_epoch_end(self, epoch, logs=None):
+        # TODO: every 10 epochs
+        if epoch % 2 == 0:
+            self.model.evaluate(self.test_set, callbacks=[self.tb_callback])
+
+
 def _execute_training_process(my_model,
                               training_set,
                               test_set,
                               epochs,
                               shuffle,
                               process,
+                              use_attention,
+                              use_extra_loss,
                               optimizer,
                               lr,
                               decay_rate,
@@ -128,15 +143,22 @@ def _execute_training_process(my_model,
     if not os.path.exists(process_saved_path):
         os.mkdir(process_saved_path)
     checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(process_saved_path, 'checkpoint.h5'),
-                                                             monitor='Transformation_Loss' if process == 2 else 'Total_Loss',
+                                                             monitor='Transformation_Loss' if (process == 2 and use_attention and not use_extra_loss) or
+                                                                                              (process == 2 and not use_attention) else 'Total_Loss',
                                                              save_best_only=True,
                                                              save_weights_only=True,
                                                              mode='min')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process_saved_path, 'logs'),
                                                           histogram_freq=1,
                                                           profile_batch=0)
+    # TODO: x ticks
+    tensorboard_callback_eval = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process_saved_path, 'logs'),
+                                                               update_freq='batch',
+                                                               profile_batch=0)
     lr_scheduler = _get_lr_scheduler(decay_rate, decay_step_size)
     lr_scheduler_callback = tf.keras.callbacks.LearningRateScheduler(lr_scheduler)
+    evaluation_callback = EvaluationCallback(test_set, tensorboard_callback_eval)
+    # TODO: add callback
     callbacks = [checkpoint_callback, tensorboard_callback, lr_scheduler_callback]
     opt = _get_optimizer(optimizer, lr)
     my_model.compile(optimizer=opt, run_eagerly=True)
@@ -158,6 +180,7 @@ if __name__ == '__main__':
                 model_path=hparam['model_path'],
                 shuffle=hparam['shuffle'],
                 use_attention=hparam['use_attention'],
+                use_extra_loss=hparam['use_extra_loss'],
                 which_layer=hparam['which_layer'],
                 num_blocks=hparam['num_blocks'],
                 num_heads=hparam['num_heads'],

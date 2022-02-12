@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow import keras
 from tensorflow.keras import layers
+from quantity_eval import *
 
 
 class BinaryShapeEncoder(keras.layers.Layer):
@@ -102,11 +103,11 @@ class SharedPartDecoder(keras.layers.Layer):
         self.deconv1 = layers.Conv3DTranspose(128, 3, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
         self.deconv2 = layers.Conv3DTranspose(64, 3, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
         self.deconv3 = layers.Conv3DTranspose(32, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
-        # self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
-        # self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1), activation='sigmoid')
-        self.deconv4 = layers.Conv3DTranspose(16, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
+        self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
+        self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1), activation='sigmoid')
+        # self.deconv4 = layers.Conv3DTranspose(16, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
         # self.deconv5 = layers.Conv3D(1, 5, (1, 1, 1), padding='same', activation='sigmoid')
-        self.deconv5 = layers.Conv3DTranspose(1, 5, (1, 1, 1), padding='same', activation='sigmoid')
+        # self.deconv5 = layers.Conv3DTranspose(1, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0), activation='sigmoid')
 
         self.act = layers.LeakyReLU()
         self.act1 = layers.LeakyReLU()
@@ -513,11 +514,12 @@ class AttentionLayer(keras.layers.Layer):
 
 class Model(keras.Model):
 
-    def __init__(self, num_parts, training_process, use_attention, which_layer, num_blocks, num_heads, d_model, **kwargs):
+    def __init__(self, num_parts, training_process, use_attention, use_extra_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
         super(Model, self).__init__(**kwargs)
         self.num_parts = num_parts
         self.training_process = training_process
         self.use_attention = use_attention
+        self.use_extra_loss = use_extra_loss
         self.which_layer = which_layer
 
         # build layers
@@ -550,9 +552,13 @@ class Model(keras.Model):
         self.pi_loss_tracker = tf.keras.metrics.Mean()
         self.part_reconstruction_loss_tracker = tf.keras.metrics.Mean()
         self.transformation_loss_tracker = tf.keras.metrics.Mean()
-        self.cycle_loss_tracker = tf.keras.metrics.Mean()
+        self.extra_loss_tracker = tf.keras.metrics.Mean()
         self.shape_reconstruction_loss_tracker = tf.keras.metrics.Mean()
         self.total_loss_tracker = tf.keras.metrics.Mean()
+
+        # create some evaluation tracker
+        self.part_mIoU_tracker = tf.keras.metrics.Mean()
+        self.shape_mIoU_tracker = tf.keras.metrics.Mean()
 
     def call(self, inputs, training=False):
 
@@ -569,11 +575,11 @@ class Model(keras.Model):
                 return self.stacked_decoded_parts
 
             elif self.training_process == 2 or self.training_process == '2':
-                decomposer_output = self.decomposer(inputs, training=False)
+                decomposer_output = self.decomposer(inputs, training=training)
                 out1, out2, out3, out4, out5, decoder_outputs = [], [], [], [], [], []
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
-                    decoder_output = self.part_decoder(each, training=False)
+                    decoder_output = self.part_decoder(each, training=training)
                     out1.append(self.part_decoder.out1)
                     out2.append(self.part_decoder.out2)
                     out3.append(self.part_decoder.out3)
@@ -587,35 +593,35 @@ class Model(keras.Model):
                 inter4 = tf.stack(out4, axis=1)
                 inter5 = tf.stack(out5, axis=1)
                 self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
-                attention_output_list = list()
+                self.attention_output_list = list()
                 for i, each_attention in enumerate(self.attention_layer_list):
                     if self.which_layer[i] is '0':
-                        attention_output_list.append(each_attention(decomposer_output, training=training))
+                        self.attention_output_list.append(each_attention(decomposer_output, training=training))
                     elif self.which_layer[i] is '1':
-                        attention_output_list.append(each_attention(inter1, training=training))
+                        self.attention_output_list.append(each_attention(inter1, training=training))
                     elif self.which_layer[i] is '2':
-                        attention_output_list.append(each_attention(inter2, training=training))
+                        self.attention_output_list.append(each_attention(inter2, training=training))
                     elif self.which_layer[i] is '3':
-                        attention_output_list.append(each_attention(inter3, training=training))
+                        self.attention_output_list.append(each_attention(inter3, training=training))
                     elif self.which_layer[i] is '4':
-                        attention_output_list.append(each_attention(inter4, training=training))
+                        self.attention_output_list.append(each_attention(inter4, training=training))
                     elif self.which_layer[i] is '5':
-                        attention_output_list.append(each_attention(inter5, training=training))
+                        self.attention_output_list.append(each_attention(inter5, training=training))
                     elif self.which_layer[i] is '6':
-                        attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
+                        self.attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
                     else:
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, 5 and 6')
-                concat_output = tf.concat(attention_output_list, axis=2)
+                concat_output = tf.concat(self.attention_output_list, axis=2)
                 dense_output = self.dense(concat_output)
                 self.theta = tf.reshape(dense_output, (tf.shape(dense_output)[0], self.num_parts, 3, 4))
                 return self.theta
 
             else:
-                decomposer_output = self.decomposer(inputs, training=False)
+                decomposer_output = self.decomposer(inputs, training=training)
                 out1, out2, out3, out4, out5, decoder_outputs = [], [], [], [], [], []
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
-                    decoder_output = self.part_decoder(each, training=False)
+                    decoder_output = self.part_decoder(each, training=training)
                     out1.append(self.part_decoder.out1)
                     out2.append(self.part_decoder.out2)
                     out3.append(self.part_decoder.out3)
@@ -629,25 +635,25 @@ class Model(keras.Model):
                 inter4 = tf.stack(out4, axis=1)
                 inter5 = tf.stack(out5, axis=1)
                 self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
-                attention_output_list = list()
+                self.attention_output_list = list()
                 for i, each_attention in enumerate(self.attention_layer_list):
                     if self.which_layer[i] is '0':
-                        attention_output_list.append(each_attention(decomposer_output, training=training))
+                        self.attention_output_list.append(each_attention(decomposer_output, training=training))
                     elif self.which_layer[i] is '1':
-                        attention_output_list.append(each_attention(inter1, training=training))
+                        self.attention_output_list.append(each_attention(inter1, training=training))
                     elif self.which_layer[i] is '2':
-                        attention_output_list.append(each_attention(inter2, training=training))
+                        self.attention_output_list.append(each_attention(inter2, training=training))
                     elif self.which_layer[i] is '3':
-                        attention_output_list.append(each_attention(inter3, training=training))
+                        self.attention_output_list.append(each_attention(inter3, training=training))
                     elif self.which_layer[i] is '4':
-                        attention_output_list.append(each_attention(inter4, training=training))
+                        self.attention_output_list.append(each_attention(inter4, training=training))
                     elif self.which_layer[i] is '5':
-                        attention_output_list.append(each_attention(inter5, training=training))
+                        self.attention_output_list.append(each_attention(inter5, training=training))
                     elif self.which_layer[i] is '6':
-                        attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
+                        self.attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
                     else:
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, 5 and 6')
-                concat_output = tf.concat(attention_output_list, axis=2)
+                concat_output = tf.concat(self.attention_output_list, axis=2)
                 dense_output = self.dense(concat_output)
                 self.theta = tf.reshape(dense_output, (tf.shape(dense_output)[0], self.num_parts, 3, 4))
                 resampling_inputs = (self.stacked_decoded_parts, self.theta)
@@ -668,11 +674,11 @@ class Model(keras.Model):
 
             elif self.training_process == 2 or self.training_process == '2':
                 # decomposer output has shape (B, num_parts, encoding_dims)
-                decomposer_output = self.decomposer(inputs, training=False)
+                decomposer_output = self.decomposer(inputs, training=training)
                 decoder_outputs = list()
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
-                    decoder_outputs.append(self.part_decoder(each, training=False))
+                    decoder_outputs.append(self.part_decoder(each, training=training))
                 # stacked_decoded_parts should be in the shape of (B, num_parts, H, W, D, C)
                 self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
                 # summed_inputs should be in the shape of (B, encoding_dims)
@@ -722,24 +728,41 @@ class Model(keras.Model):
                     'Total_Loss': self.total_loss_tracker.result()}
 
         elif self.training_process == 2 or self.training_process == '2':
-            with tf.GradientTape() as tape:
-                theta = self(x, training=True)
-                trans_loss = self._cal_transformation_loss(trans, theta)
-
             if self.use_attention:
                 weights_list = list()
                 for layer in self.attention_layer_list:
                     weights_list.extend(layer.trainable_weights)
                 weights_list.extend(self.dense.trainable_weights)
-                grads = tape.gradient(trans_loss, weights_list)
-                self.optimizer.apply_gradients(zip(grads, weights_list))
+                with tf.GradientTape() as tape:
+                    theta = self(x, training=True)
+                    trans_loss = self._cal_transformation_loss(trans, theta)
+                    if self.use_extra_loss:
+                        if len(self.attention_output_list) < 2:
+                            raise ValueError('which_layer should at least contain 2 layers when use_extra_loss is True!')
+                        extra_loss = self._cal_extra_loss(self.attention_output_list)
+                        total_loss = trans_loss + extra_loss
+                if self.use_extra_loss:
+                    grads = tape.gradient(total_loss, weights_list)
+                    self.optimizer.apply_gradients(zip(grads, weights_list))
+                    self.transformation_loss_tracker.update_state(trans_loss)
+                    self.extra_loss_tracker.update_state(extra_loss)
+                    self.total_loss_tracker.update_state(total_loss)
+                    return {'Transformation_Loss': self.transformation_loss_tracker.result(),
+                            'Extra_Loss': self.extra_loss_tracker.result(),
+                            'Total_Loss': self.total_loss_tracker.result()}
+                else:
+                    grads = tape.gradient(trans_loss, weights_list)
+                    self.optimizer.apply_gradients(zip(grads, weights_list))
+                    self.transformation_loss_tracker.update_state(trans_loss)
+                    return {'Transformation_Loss': self.transformation_loss_tracker.result()}
             else:
+                with tf.GradientTape() as tape:
+                    theta = self(x, training=True)
+                    trans_loss = self._cal_transformation_loss(trans, theta)
                 grads = tape.gradient(trans_loss, self.localization_net.trainable_weights)
                 self.optimizer.apply_gradients(zip(grads, self.localization_net.trainable_weights))
-
-            self.transformation_loss_tracker.update_state(trans_loss)
-
-            return {'Transformation_Loss': self.transformation_loss_tracker.result()}
+                self.transformation_loss_tracker.update_state(trans_loss)
+                return {'Transformation_Loss': self.transformation_loss_tracker.result()}
 
         elif self.training_process == 3 or self.training_process == '3':
             with tf.GradientTape() as tape:
@@ -748,22 +771,41 @@ class Model(keras.Model):
                 part_recon_loss = self._cal_part_reconstruction_loss(label, self.stacked_decoded_parts)
                 trans_loss = self._cal_transformation_loss(trans, self.theta)
                 shape_recon_loss = self._cal_shape_reconstruction_loss(x, tf.reduce_max(stacked_transformed_parts, axis=1))
-                total_loss = pi_loss + part_recon_loss + trans_loss + shape_recon_loss
-
-            grads = tape.gradient(total_loss, self.trainable_weights)
-            self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
-
-            self.pi_loss_tracker.update_state(pi_loss)
-            self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
-            self.transformation_loss_tracker.update_state(trans_loss)
-            self.shape_reconstruction_loss_tracker.update_state(shape_recon_loss)
-            self.total_loss_tracker.update_state(total_loss)
-
-            return {'PI_Loss': self.pi_loss_tracker.result(),
-                    'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
-                    'Transformation_Loss': self.transformation_loss_tracker.result(),
-                    'Shape_Recon_Loss': self.shape_reconstruction_loss_tracker.result(),
-                    'Total_Loss': self.total_loss_tracker.result()}
+                if self.use_extra_loss:
+                    if len(self.attention_output_list) < 2:
+                        raise ValueError('which_layer should at least contain 2 layers when use_extra_loss is True!')
+                    extra_loss = self._cal_extra_loss(self.attention_output_list)
+                    total_loss = pi_loss + part_recon_loss + trans_loss + extra_loss + shape_recon_loss
+                else:
+                    total_loss = pi_loss + part_recon_loss + trans_loss + shape_recon_loss
+            if self.use_extra_loss:
+                grads = tape.gradient(total_loss, self.trainable_weights)
+                self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+                self.pi_loss_tracker.update_state(pi_loss)
+                self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
+                self.transformation_loss_tracker.update_state(trans_loss)
+                self.extra_loss_tracker.update_state(extra_loss)
+                self.shape_reconstruction_loss_tracker.update_state(shape_recon_loss)
+                self.total_loss_tracker.update_state(total_loss)
+                return {'PI_Loss': self.pi_loss_tracker.result(),
+                        'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
+                        'Transformation_Loss': self.transformation_loss_tracker.result(),
+                        'Extra_Loss': self.extra_loss_tracker.result(),
+                        'Shape_Recon_Loss': self.shape_reconstruction_loss_tracker.result(),
+                        'Total_Loss': self.total_loss_tracker.result()}
+            else:
+                grads = tape.gradient(total_loss, self.trainable_weights)
+                self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+                self.pi_loss_tracker.update_state(pi_loss)
+                self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
+                self.transformation_loss_tracker.update_state(trans_loss)
+                self.shape_reconstruction_loss_tracker.update_state(shape_recon_loss)
+                self.total_loss_tracker.update_state(total_loss)
+                return {'PI_Loss': self.pi_loss_tracker.result(),
+                        'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
+                        'Transformation_Loss': self.transformation_loss_tracker.result(),
+                        'Shape_Recon_Loss': self.shape_reconstruction_loss_tracker.result(),
+                        'Total_Loss': self.total_loss_tracker.result()}
 
         else:
             raise ValueError('training process should be one of 1, 2 and 3')
@@ -798,7 +840,42 @@ class Model(keras.Model):
     def _cal_transformation_loss(gt, pred):
         return tf.nn.l2_loss(gt-pred) / tf.cast(tf.shape(gt)[0], dtype=tf.float32)
 
+    @staticmethod
+    def _cal_extra_loss(pred):
+        loss = list()
+        for i in range(len(pred)):
+            for j in range(len(pred)):
+                if i < j:
+                    loss.append(tf.math.square(pred[i] - pred[j]))
+                else:
+                    continue
+        return tf.reduce_mean(loss)
+
     @property
     def metrics(self):
         return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
-                self.cycle_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker]
+                self.extra_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker,
+                self.part_mIoU_tracker, self.shape_mIoU_tracker]
+
+    def test_step(self, data):
+        x, label, trans = data
+        if self.training_process == 1 or self.training_process == '1':
+            pred = self(x, training=False)
+            part_mIoU = cal_mIoU(label, pred)
+            self.part_mIoU_tracker.update_state(part_mIoU)
+            return {'part_mIoU': self.part_mIoU_tracker.result()}
+
+        if self.training_process == 2 or self.training_process == '2':
+            theta = self(x, training=False)
+            pred = Resampling()((self.stacked_decoded_parts, theta))
+            shape_mIoU = cal_mIoU(x, tf.reduce_max(pred, axis=1))
+            self.shape_mIoU_tracker.update_state(shape_mIoU)
+            return {'shape_mIoU': self.shape_mIoU_tracker.result()}
+
+        else:
+            pred = self(x, training=False)
+            part_mIoU = cal_mIoU(label, self.stacked_decoded_parts)
+            shape_mIoU = cal_mIoU(x, tf.reduce_max(pred, axis=1))
+            self.part_mIoU_tracker.update_state(part_mIoU)
+            self.shape_mIoU_tracker.update_state(shape_mIoU)
+            return {'part_mIoU': self.part_mIoU_tracker.result(), 'shape_mIoU': self.shape_mIoU_tracker.result()}
