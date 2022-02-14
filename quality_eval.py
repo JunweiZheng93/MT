@@ -28,13 +28,18 @@ def evaluate_model(model_path,
     if category not in ['chair', 'table', 'airplane', 'lamp']:
         raise ValueError('category should be one of chair, table, airplane and lamp!')
 
+    # disable warning and info message, only enable error message
+    tf.get_logger().setLevel('ERROR')
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
     # check parameters
-    if mode == 'single':
+    if mode == 'batch':
+        pass
+    elif mode == 'single':
         if not single_shape_path.endswith('/'):
             single_shape_path += '/'
         category_code = single_shape_path.split('/')[-3]
         category = list(CATEGORY_MAP.keys())[list(CATEGORY_MAP.values()).index(category_code)]
-
     else:
         raise ValueError('mode should be one of batch and single!')
 

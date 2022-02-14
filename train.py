@@ -120,8 +120,7 @@ class EvaluationCallback(tf.keras.callbacks.Callback):
         self.tb_callback = tb_callback
 
     def on_epoch_end(self, epoch, logs=None):
-        # TODO: every 10 epochs
-        if epoch % 2 == 0:
+        if (epoch + 1) % 10 == 0:
             self.model.evaluate(self.test_set, callbacks=[self.tb_callback])
 
 
@@ -148,18 +147,11 @@ def _execute_training_process(my_model,
                                                              save_best_only=True,
                                                              save_weights_only=True,
                                                              mode='min')
-    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process_saved_path, 'logs'),
-                                                          histogram_freq=1,
-                                                          profile_batch=0)
-    # TODO: x ticks
-    tensorboard_callback_eval = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process_saved_path, 'logs'),
-                                                               update_freq='batch',
-                                                               profile_batch=0)
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process_saved_path, 'logs'), profile_batch=0)
     lr_scheduler = _get_lr_scheduler(decay_rate, decay_step_size)
     lr_scheduler_callback = tf.keras.callbacks.LearningRateScheduler(lr_scheduler)
-    evaluation_callback = EvaluationCallback(test_set, tensorboard_callback_eval)
-    # TODO: add callback
-    callbacks = [checkpoint_callback, tensorboard_callback, lr_scheduler_callback]
+    evaluation_callback = EvaluationCallback(test_set, tensorboard_callback)
+    callbacks = [checkpoint_callback, tensorboard_callback, lr_scheduler_callback, evaluation_callback]
     opt = _get_optimizer(optimizer, lr)
     my_model.compile(optimizer=opt, run_eagerly=True)
     my_model.fit(training_set, epochs=epochs, callbacks=callbacks, shuffle=shuffle)

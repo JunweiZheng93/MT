@@ -557,8 +557,8 @@ class Model(keras.Model):
         self.total_loss_tracker = tf.keras.metrics.Mean()
 
         # create some evaluation tracker
-        self.part_mIoU_tracker = tf.keras.metrics.Mean()
-        self.shape_mIoU_tracker = tf.keras.metrics.Mean()
+        self.part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
+        self.shape_mIoU_tracker = tf.keras.metrics.Mean(2)
 
     def call(self, inputs, training=False):
 
@@ -858,24 +858,28 @@ class Model(keras.Model):
                 self.part_mIoU_tracker, self.shape_mIoU_tracker]
 
     def test_step(self, data):
-        x, label, trans = data
+        x, labels, trans = data
         if self.training_process == 1 or self.training_process == '1':
-            pred = self(x, training=False)
-            part_mIoU = cal_mIoU(label, pred)
-            self.part_mIoU_tracker.update_state(part_mIoU)
+            parts = self(x, training=False)
+            parts = tf.transpose(tf.where(parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
+            labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
+            for gt, part in zip(labels, parts):
+                self.part_mIoU_tracker.update_state(gt, part)
             return {'part_mIoU': self.part_mIoU_tracker.result()}
 
         if self.training_process == 2 or self.training_process == '2':
             theta = self(x, training=False)
-            pred = Resampling()((self.stacked_decoded_parts, theta))
-            shape_mIoU = cal_mIoU(x, tf.reduce_max(pred, axis=1))
-            self.shape_mIoU_tracker.update_state(shape_mIoU)
+            shapes = Resampling()((self.stacked_decoded_parts, theta))
+            shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
+            self.shape_mIoU_tracker.update_state(x, shapes)
             return {'shape_mIoU': self.shape_mIoU_tracker.result()}
 
         else:
-            pred = self(x, training=False)
-            part_mIoU = cal_mIoU(label, self.stacked_decoded_parts)
-            shape_mIoU = cal_mIoU(x, tf.reduce_max(pred, axis=1))
-            self.part_mIoU_tracker.update_state(part_mIoU)
-            self.shape_mIoU_tracker.update_state(shape_mIoU)
+            shapes = self(x, training=False)
+            shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
+            parts = tf.transpose(tf.where(self.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
+            labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
+            for gt, part in zip(labels, parts):
+                self.part_mIoU_tracker.update_state(gt, part)
+            self.shape_mIoU_tracker.update_state(x, shapes)
             return {'part_mIoU': self.part_mIoU_tracker.result(), 'shape_mIoU': self.shape_mIoU_tracker.result()}
