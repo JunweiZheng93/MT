@@ -383,13 +383,14 @@ class Resampling(keras.layers.Layer):
 
 class MultiHeadAttention(keras.layers.Layer):
 
-    def __init__(self, num_heads, d_model, **kwargs):
+    def __init__(self, num_heads, d_model, keep_channel, **kwargs):
         super(MultiHeadAttention, self).__init__(**kwargs)
 
         self.num_heads = num_heads
         assert d_model % num_heads == 0
         self.depth = d_model // num_heads
         self.d_model = d_model
+        self.keep_channel = keep_channel
 
         self.wq = layers.Dense(d_model)
         self.wk = layers.Dense(d_model)
@@ -397,22 +398,24 @@ class MultiHeadAttention(keras.layers.Layer):
         self.dense = layers.Dense(d_model)
 
     def call(self, inputs):
-        batch_size = tf.shape(inputs)[0]
-        seq_len = tf.shape(inputs)[1]
         q = self.wq(inputs)
         k = self.wk(inputs)
         v = self.wv(inputs)
-        q = self._split_heads(q, batch_size)
-        k = self._split_heads(k, batch_size)
-        v = self._split_heads(v, batch_size)
+        q = self._split_heads(q)
+        k = self._split_heads(k)
+        v = self._split_heads(v)
 
-        # scaled_attention.shape == (batch_size, num_heads, seq_len, depth)
         scaled_attention = self._scaled_dot_product_attention(q, k, v)
-        # scaled_attention.shape == (batch_size, seq_len, num_heads, depth)
-        scaled_attention = tf.transpose(scaled_attention, (0, 2, 1, 3))
-        # concat_attention.shape == (batch_size, seq_len, d_model)
-        concat_attention = tf.reshape(scaled_attention, (batch_size, seq_len, self.d_model))
-        # outputs.shape == (batch_size, seq_len, d_model)
+        if self.keep_channel:
+            # scaled_attention.shape == (batch_size, channel, seq_len, num_heads, depth)
+            scaled_attention = tf.transpose(scaled_attention, (0, 1, 3, 2, 4))
+            # concat_attention.shape == (batch_size, channel, seq_len, d_model)
+            concat_attention = tf.reshape(scaled_attention, (tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], self.d_model))
+        else:
+            # scaled_attention.shape == (batch_size, seq_len, num_heads, depth)
+            scaled_attention = tf.transpose(scaled_attention, (0, 2, 1, 3))
+            # concat_attention.shape == (batch_size, seq_len, d_model)
+            concat_attention = tf.reshape(scaled_attention, (tf.shape(inputs)[0], tf.shape(inputs)[1], self.d_model))
         outputs = self.dense(concat_attention)
         return outputs
 
@@ -431,13 +434,18 @@ class MultiHeadAttention(keras.layers.Layer):
         outputs = tf.matmul(attention_weights, v)
         return outputs
 
-    def _split_heads(self, x, batch_size):
+    def _split_heads(self, x):
         """
         Split the last dimension into (num_heads, depth).
         Transpose the result such that the shape is (batch_size, num_heads, seq_len, depth)
         """
-        x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
-        return tf.transpose(x, (0, 2, 1, 3))
+        if self.keep_channel:
+            x = tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], tf.shape(x)[2], self.num_heads, self.depth))
+            x = tf.transpose(x, (0, 1, 3, 2, 4))
+        else:
+            x = tf.reshape(x, (tf.shape(x)[0], tf.shape(x)[1], self.num_heads, self.depth))
+            x = tf.transpose(x, (0, 2, 1, 3))
+        return x
 
 
 class FeedForward(keras.layers.Layer):
@@ -457,9 +465,9 @@ class FeedForward(keras.layers.Layer):
 
 class AttentionBlock(keras.layers.Layer):
 
-    def __init__(self, num_heads, d_model, **kwargs):
+    def __init__(self, num_heads, d_model, keep_channel, **kwargs):
         super(AttentionBlock, self).__init__(**kwargs)
-        self.mha = MultiHeadAttention(num_heads, d_model)
+        self.mha = MultiHeadAttention(num_heads, d_model, keep_channel)
         self.ff = FeedForward(d_model)
         self.layer_norm1 = keras.layers.LayerNormalization(epsilon=1e-6)
         self.layer_norm2 = keras.layers.LayerNormalization(epsilon=1e-6)
@@ -479,19 +487,27 @@ class AttentionBlock(keras.layers.Layer):
 
 class AttentionLayer(keras.layers.Layer):
 
-    def __init__(self, num_blocks, num_heads, d_model, seq_len, **kwargs):
+    def __init__(self, num_blocks, num_heads, d_model, seq_len, keep_channel, **kwargs):
         super(AttentionLayer, self).__init__(**kwargs)
         self.num_blocks = num_blocks
         self.num_heads = num_heads
         self.d_model = d_model
         self.seq_len = seq_len
-        self.positional_encoding = self._get_positional_encoding(seq_len, d_model)
-        self.attention_blocks = [AttentionBlock(num_heads, d_model) for _ in range(num_blocks)]
+        self.keep_channel = keep_channel
+        self.positional_encoding = self._get_positional_encoding(seq_len, d_model, keep_channel)
+        self.attention_blocks = [AttentionBlock(num_heads, d_model, keep_channel) for _ in range(num_blocks)]
         self.dense = layers.Dense(d_model)
 
     def call(self, inputs, training=False):
-        if inputs.ndim == 6:
-            inputs = tf.reshape(inputs, (tf.shape(inputs)[0], tf.shape(inputs)[1], -1))
+        if self.keep_channel:
+            if inputs.ndim == 6:
+                inputs = tf.transpose(inputs, (0, 5, 1, 2, 3, 4))
+                inputs = tf.reshape(inputs, (tf.shape(inputs)[0], tf.shape(inputs)[1], tf.shape(inputs)[2], -1))
+            else:
+                inputs = tf.expand_dims(inputs, axis=1)
+        else:
+            if inputs.ndim == 6:
+                inputs = tf.reshape(inputs, (tf.shape(inputs)[0], tf.shape(inputs)[1], -1))
         x = self.dense(inputs)
         # positional_encoding.shape == (1, seq_len, d_model)
         x = x + self.positional_encoding
@@ -504,21 +520,22 @@ class AttentionLayer(keras.layers.Layer):
         angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
         return pos * angle_rates
 
-    def _get_positional_encoding(self, seq_len, d_model):
+    def _get_positional_encoding(self, seq_len, d_model, keep_channel):
         angle_rads = self._get_angles(np.arange(seq_len)[:, np.newaxis], np.arange(d_model)[np.newaxis, :], d_model)
         angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])
         angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])
-        pos_encoding = angle_rads[np.newaxis, ...]
+        pos_encoding = angle_rads[np.newaxis, np.newaxis, ...] if keep_channel else angle_rads[np.newaxis, ...]
         return tf.cast(pos_encoding, dtype=tf.float32)
 
 
 class Model(keras.Model):
 
-    def __init__(self, num_parts, training_process, use_attention, use_extra_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
+    def __init__(self, num_parts, training_process, use_attention, keep_channel, use_extra_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
         super(Model, self).__init__(**kwargs)
         self.num_parts = num_parts
         self.training_process = training_process
         self.use_attention = use_attention
+        self.keep_channel = keep_channel
         self.use_extra_loss = use_extra_loss
         self.which_layer = which_layer
 
@@ -530,11 +547,11 @@ class Model(keras.Model):
                 self.part_decoder = SharedPartDecoder()
             elif training_process == 2 or training_process == '2':
                 self.part_decoder = SharedPartDecoder()
-                self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts) for i in range(len(which_layer))]
+                self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts, keep_channel) for i in range(len(which_layer))]
                 self.dense = layers.Dense(12)
             else:
                 self.part_decoder = SharedPartDecoder()
-                self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts) for i in range(len(which_layer))]
+                self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts, keep_channel) for i in range(len(which_layer))]
                 self.dense = layers.Dense(12)
                 self.resampling = Resampling()
         else:
@@ -611,7 +628,14 @@ class Model(keras.Model):
                         self.attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
                     else:
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, 5 and 6')
-                concat_output = tf.concat(self.attention_output_list, axis=2)
+                if self.keep_channel:
+                    temp = list()
+                    for each in self.attention_output_list:
+                        each = tf.transpose(each, (0, 2, 1, 3))
+                        temp.append(tf.reshape(each, (tf.shape(each)[0], tf.shape(each)[1], -1)))
+                    concat_output = tf.concat(temp, axis=2)
+                else:
+                    concat_output = tf.concat(self.attention_output_list, axis=2)
                 dense_output = self.dense(concat_output)
                 self.theta = tf.reshape(dense_output, (tf.shape(dense_output)[0], self.num_parts, 3, 4))
                 return self.theta
@@ -653,7 +677,14 @@ class Model(keras.Model):
                         self.attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
                     else:
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, 5 and 6')
-                concat_output = tf.concat(self.attention_output_list, axis=2)
+                if self.keep_channel:
+                    temp = list()
+                    for each in self.attention_output_list:
+                        each = tf.transpose(each, (0, 2, 1, 3))
+                        temp.append(tf.reshape(each, (tf.shape(each)[0], tf.shape(each)[1], -1)))
+                    concat_output = tf.concat(temp, axis=2)
+                else:
+                    concat_output = tf.concat(self.attention_output_list, axis=2)
                 dense_output = self.dense(concat_output)
                 self.theta = tf.reshape(dense_output, (tf.shape(dense_output)[0], self.num_parts, 3, 4))
                 resampling_inputs = (self.stacked_decoded_parts, self.theta)
