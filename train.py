@@ -14,6 +14,7 @@ def train_model(category='chair',
                 batch_size=32,
                 split_ratio=0.8,
                 max_num_parts=4,
+                bce_weight=0.8,
                 optimizer='adam',
                 lr=0.001,
                 decay_rate=0.8,
@@ -41,7 +42,7 @@ def train_model(category='chair',
     # get dataset
     training_set, test_set = dataloader.get_dataset(category=category, batch_size=batch_size, split_ratio=split_ratio, max_num_parts=max_num_parts)
     # create model
-    my_model = model.Model(max_num_parts, training_process, use_attention, keep_channel, use_extra_loss, which_layer, num_blocks, num_heads, d_model)
+    my_model = model.Model(max_num_parts, bce_weight, training_process, use_attention, keep_channel, use_extra_loss, which_layer, num_blocks, num_heads, d_model)
 
     if training_process == 1 or training_process == '1':
         _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 1, use_attention, use_extra_loss, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
@@ -125,13 +126,15 @@ class EvaluationCallback(tf.keras.callbacks.Callback):
             self.model.evaluate(self.test_set)
             with self.summary_writer.as_default():
                 if self.model.training_process == 1 or self.model.training_process == '1':
-                    tf.summary.scalar('eval_Part_mIoU', self.model.part_mIoU_tracker.result(), step=epoch)
+                    for i in range(self.model.num_parts):
+                        tf.summary.scalar(f'eval_Part{i+1}_mIoU', self.model.part_mIoU_tracker_list[i].result(), step=epoch)
                 elif self.model.training_process == 2 or self.model.training_process == '2':
                     tf.summary.scalar('eval_Transformation_Error', self.model.transformation_error_tracker.result(), step=epoch)
                     tf.summary.scalar('eval_Shape_mIoU', self.model.shape_mIoU_tracker.result(), step=epoch)
                 else:
+                    for i in range(self.model.num_parts):
+                        tf.summary.scalar(f'eval_Part{i+1}_mIoU', self.model.part_mIoU_tracker_list[i].result(), step=epoch)
                     tf.summary.scalar('eval_Transformation_Error', self.model.transformation_error_tracker.result(), step=epoch)
-                    tf.summary.scalar('eval_Part_mIoU', self.model.part_mIoU_tracker.result(), step=epoch)
                     tf.summary.scalar('eval_Shape_mIoU', self.model.shape_mIoU_tracker.result(), step=epoch)
 
 
@@ -175,6 +178,7 @@ if __name__ == '__main__':
                 batch_size=hparam['batch_size'],
                 split_ratio=hparam['split_ratio'],
                 max_num_parts=hparam['max_num_parts'],
+                bce_weight=hparam['bce_weight'],
                 optimizer=hparam['optimizer'],
                 lr=hparam['lr'],
                 decay_rate=hparam['decay_rate'],

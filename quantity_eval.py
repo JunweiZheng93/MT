@@ -26,9 +26,10 @@ def evaluate_model(model_path,
     warm_up_data = tf.ones((1, H, W, D, C), dtype=tf.float32)
     model = importlib.import_module(f"results.{model_path.split('/')[-3]}.model")
     hparam = importlib.import_module(f"results.{model_path.split('/')[-3]}.hparam")
-    my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['training_process'], hparam.hparam['use_attention'],
-                           hparam.hparam['keep_channel'], hparam.hparam['use_extra_loss'], hparam.hparam['which_layer'],
-                           hparam.hparam['num_blocks'], hparam.hparam['num_heads'], hparam.hparam['d_model'])
+    my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['bce_weight'], hparam.hparam['training_process'],
+                           hparam.hparam['use_attention'], hparam.hparam['keep_channel'], hparam.hparam['use_extra_loss'],
+                           hparam.hparam['which_layer'], hparam.hparam['num_blocks'], hparam.hparam['num_heads'],
+                           hparam.hparam['d_model'])
     my_model(warm_up_data)
     my_model.load_weights(model_path, by_name=True)
 
@@ -37,7 +38,7 @@ def evaluate_model(model_path,
                                                     split_ratio=hparam.hparam['split_ratio'], max_num_parts=hparam.hparam['max_num_parts'])
 
     transformation_error_tracker = tf.keras.metrics.Mean()
-    part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
+    part_mIoU_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
     shape_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
 
     print('Your model is being evaluated, please wait...')
@@ -47,9 +48,10 @@ def evaluate_model(model_path,
             parts = my_model(x, training=False)
             parts = tf.transpose(tf.where(parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part in zip(labels, parts):
-                part_mIoU_tracker.update_state(gt, part)
-        print(f'Part_mIoU: {part_mIoU_tracker.result()}')
+            for gt, part, tracker in zip(labels, parts, part_mIoU_tracker_list):
+                tracker.update_state(gt, part)
+        for i in range(my_model.num_parts):
+            print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
 
     elif hparam.hparam['training_process'] == 2 or hparam.hparam['training_process'] == '2':
         for x, labels, trans in test_set:
@@ -70,11 +72,12 @@ def evaluate_model(model_path,
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             parts = tf.transpose(tf.where(my_model.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part in zip(labels, parts):
-                part_mIoU_tracker.update_state(gt, part)
+            for gt, part, tracker in zip(labels, parts, part_mIoU_tracker_list):
+                tracker.update_state(gt, part)
             shape_mIoU_tracker.update_state(x, shapes)
+        for i in range(my_model.num_parts):
+            print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
         print(f'Transformation_Error: {transformation_error_tracker.result()}')
-        print(f'Part_mIoU: {part_mIoU_tracker.result()}')
         print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
 
 

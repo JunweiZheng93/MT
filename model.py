@@ -529,9 +529,10 @@ class AttentionLayer(keras.layers.Layer):
 
 class Model(keras.Model):
 
-    def __init__(self, num_parts, training_process, use_attention, keep_channel, use_extra_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
+    def __init__(self, num_parts, bce_weight, training_process, use_attention, keep_channel, use_extra_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
         super(Model, self).__init__(**kwargs)
         self.num_parts = num_parts
+        self.bce_weight = bce_weight
         self.training_process = training_process
         self.use_attention = use_attention
         self.keep_channel = keep_channel
@@ -574,7 +575,7 @@ class Model(keras.Model):
 
         # create some evaluation tracker
         self.transformation_error_tracker = tf.keras.metrics.Mean()
-        self.part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
+        self.part_mIoU_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(num_parts)]
         self.shape_mIoU_tracker = tf.keras.metrics.Mean(2)
 
     def call(self, inputs, training=False):
@@ -859,14 +860,14 @@ class Model(keras.Model):
         pi_loss3 = tf.norm(tf.reduce_sum(params_tensor, axis=0) - tf.eye(tf.shape(params_tensor)[1])) ** 2
         return pi_loss1 + pi_loss2 + pi_loss3
 
-    @staticmethod
-    def _cal_part_reconstruction_loss(gt, pred):
-        return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3, 4)))
-
     # @staticmethod
     # def _cal_part_reconstruction_loss(gt, pred):
-    #     bce = tf.reduce_sum(-0.8 * gt * tf.math.log(pred) - 0.2 * (1-gt) * tf.math.log(1-pred), axis=(1, 2, 3, 4, 5))
-    #     return tf.reduce_mean(bce)
+    #     return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3, 4)))
+
+    def _cal_part_reconstruction_loss(self, gt, pred):
+        pred = tf.clip_by_value(pred, 1e-7, 1.-1e-7)
+        bce = tf.reduce_sum(-self.bce_weight * gt * tf.math.log(pred + 1e-7) - (1 - self.bce_weight) * (1 - gt) * tf.math.log(1 - pred + 1e-7), axis=(1, 2, 3, 4, 5))
+        return tf.reduce_mean(bce)
 
     @staticmethod
     def _cal_shape_reconstruction_loss(gt, pred):
@@ -891,7 +892,7 @@ class Model(keras.Model):
     def metrics(self):
         return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
                 self.extra_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker,
-                self.transformation_error_tracker, self.part_mIoU_tracker, self.shape_mIoU_tracker]
+                self.transformation_error_tracker, self.shape_mIoU_tracker] + self.part_mIoU_tracker_list
 
     def test_step(self, data):
         x, labels, trans = data
@@ -899,9 +900,9 @@ class Model(keras.Model):
             parts = self(x, training=False)
             parts = tf.transpose(tf.where(parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part in zip(labels, parts):
-                self.part_mIoU_tracker.update_state(gt, part)
-            return {'Part_mIoU': self.part_mIoU_tracker.result()}
+            for gt, part, tracker in zip(labels, parts, self.part_mIoU_tracker_list):
+                tracker.update_state(gt, part)
+            return {f'Part{i+1}_mIoU': self.part_mIoU_tracker_list[i].result() for i in range(self.num_parts)}
 
         if self.training_process == 2 or self.training_process == '2':
             theta = self(x, training=False)
@@ -920,9 +921,11 @@ class Model(keras.Model):
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             parts = tf.transpose(tf.where(self.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part in zip(labels, parts):
-                self.part_mIoU_tracker.update_state(gt, part)
+            for gt, part, tracker in zip(labels, parts, self.part_mIoU_tracker_list):
+                tracker.update_state(gt, part)
             self.shape_mIoU_tracker.update_state(x, shapes)
-            return {'Transformation_Error': self.transformation_error_tracker.result(),
-                    'Part_mIoU': self.part_mIoU_tracker.result(),
-                    'Shape_mIoU': self.shape_mIoU_tracker.result()}
+            metrics_dict = {f'Part{i+1}_mIoU': self.part_mIoU_tracker_list[i].result() for i in range(self.num_parts)}
+            dict1 = {'Transformation_Error': self.transformation_error_tracker.result(), 'Shape_mIoU': self.shape_mIoU_tracker.result()}
+            metrics_dict.update(dict1)
+            return metrics_dict
+
