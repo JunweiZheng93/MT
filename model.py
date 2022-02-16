@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 from tensorflow import keras
 from tensorflow.keras import layers
-from quantity_eval import *
 
 
 class BinaryShapeEncoder(keras.layers.Layer):
@@ -574,6 +573,7 @@ class Model(keras.Model):
         self.total_loss_tracker = tf.keras.metrics.Mean()
 
         # create some evaluation tracker
+        self.transformation_error_tracker = tf.keras.metrics.Mean()
         self.part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
         self.shape_mIoU_tracker = tf.keras.metrics.Mean(2)
 
@@ -863,13 +863,18 @@ class Model(keras.Model):
     def _cal_part_reconstruction_loss(gt, pred):
         return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3, 4)))
 
+    # @staticmethod
+    # def _cal_part_reconstruction_loss(gt, pred):
+    #     bce = tf.reduce_sum(-0.8 * gt * tf.math.log(pred) - 0.2 * (1-gt) * tf.math.log(1-pred), axis=(1, 2, 3, 4, 5))
+    #     return tf.reduce_mean(bce)
+
     @staticmethod
     def _cal_shape_reconstruction_loss(gt, pred):
         return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3)))
 
     @staticmethod
     def _cal_transformation_loss(gt, pred):
-        return tf.nn.l2_loss(gt-pred) / tf.cast(tf.shape(gt)[0], dtype=tf.float32)
+        return 2 * tf.nn.l2_loss(gt-pred) / (tf.cast(tf.shape(gt)[0], dtype=tf.float32) * tf.cast(tf.shape(gt)[1], dtype=tf.float32))
 
     @staticmethod
     def _cal_extra_loss(pred):
@@ -886,7 +891,7 @@ class Model(keras.Model):
     def metrics(self):
         return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
                 self.extra_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker,
-                self.part_mIoU_tracker, self.shape_mIoU_tracker]
+                self.transformation_error_tracker, self.part_mIoU_tracker, self.shape_mIoU_tracker]
 
     def test_step(self, data):
         x, labels, trans = data
@@ -896,21 +901,28 @@ class Model(keras.Model):
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
             for gt, part in zip(labels, parts):
                 self.part_mIoU_tracker.update_state(gt, part)
-            return {'part_mIoU': self.part_mIoU_tracker.result()}
+            return {'Part_mIoU': self.part_mIoU_tracker.result()}
 
         if self.training_process == 2 or self.training_process == '2':
             theta = self(x, training=False)
+            trans_error = self._cal_transformation_loss(trans, theta) * 2 / self.num_parts
+            self.transformation_error_tracker.update_state(trans_error)
             shapes = Resampling()((self.stacked_decoded_parts, theta))
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             self.shape_mIoU_tracker.update_state(x, shapes)
-            return {'shape_mIoU': self.shape_mIoU_tracker.result()}
+            return {'Transformation_Error': self.transformation_error_tracker.result(),
+                    'Shape_mIoU': self.shape_mIoU_tracker.result()}
 
         else:
             shapes = self(x, training=False)
+            trans_error = self._cal_transformation_loss(trans, self.theta) * 2 / self.num_parts
+            self.transformation_error_tracker.update_state(trans_error)
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             parts = tf.transpose(tf.where(self.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
             for gt, part in zip(labels, parts):
                 self.part_mIoU_tracker.update_state(gt, part)
             self.shape_mIoU_tracker.update_state(x, shapes)
-            return {'part_mIoU': self.part_mIoU_tracker.result(), 'shape_mIoU': self.shape_mIoU_tracker.result()}
+            return {'Transformation_Error': self.transformation_error_tracker.result(),
+                    'Part_mIoU': self.part_mIoU_tracker.result(),
+                    'Shape_mIoU': self.shape_mIoU_tracker.result()}

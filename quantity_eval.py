@@ -36,6 +36,7 @@ def evaluate_model(model_path,
     training_set, test_set = dataloader.get_dataset(category=hparam.hparam['category'], batch_size=hparam.hparam['batch_size'],
                                                     split_ratio=hparam.hparam['split_ratio'], max_num_parts=hparam.hparam['max_num_parts'])
 
+    transformation_error_tracker = tf.keras.metrics.Mean()
     part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
     shape_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
 
@@ -48,27 +49,33 @@ def evaluate_model(model_path,
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
             for gt, part in zip(labels, parts):
                 part_mIoU_tracker.update_state(gt, part)
-        print(f'part_mIoU: {part_mIoU_tracker.result()}')
+        print(f'Part_mIoU: {part_mIoU_tracker.result()}')
 
     elif hparam.hparam['training_process'] == 2 or hparam.hparam['training_process'] == '2':
         for x, labels, trans in test_set:
             theta = my_model(x, training=False)
+            trans_error = my_model._cal_transformation_loss(trans, theta) * 2 / my_model.num_parts
+            transformation_error_tracker.update_state(trans_error)
             shapes = model.Resampling()((my_model.stacked_decoded_parts, theta))
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             shape_mIoU_tracker.update_state(x, shapes)
-        print(f'shape_mIoU: {shape_mIoU_tracker.result()}')
+        print(f'Transformation_Error: {transformation_error_tracker.result()}')
+        print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
 
     else:
         for x, labels, trans in test_set:
             shapes = my_model(x, training=False)
+            trans_error = my_model._cal_transformation_loss(trans, my_model.theta) * 2 / my_model.num_parts
+            transformation_error_tracker.update_state(trans_error)
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             parts = tf.transpose(tf.where(my_model.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
             for gt, part in zip(labels, parts):
                 part_mIoU_tracker.update_state(gt, part)
             shape_mIoU_tracker.update_state(x, shapes)
-        print(f'part_mIoU: {part_mIoU_tracker.result()}')
-        print(f'shape_mIoU: {shape_mIoU_tracker.result()}')
+        print(f'Transformation_Error: {transformation_error_tracker.result()}')
+        print(f'Part_mIoU: {part_mIoU_tracker.result()}')
+        print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
 
 
 def configure_gpu(which_gpu):

@@ -116,13 +116,23 @@ def _get_lr_scheduler(decay_rate, decay_step_size):
 
 class EvaluationCallback(tf.keras.callbacks.Callback):
 
-    def __init__(self, test_set, tb_callback):
+    def __init__(self, test_set, summary_writer):
         self.test_set = test_set
-        self.tb_callback = tb_callback
+        self.summary_writer = summary_writer
 
     def on_epoch_end(self, epoch, logs=None):
         if (epoch + 1) % 10 == 0:
-            self.model.evaluate(self.test_set, callbacks=[self.tb_callback])
+            self.model.evaluate(self.test_set)
+            with self.summary_writer.as_default():
+                if self.model.training_process == 1 or self.model.training_process == '1':
+                    tf.summary.scalar('eval_Part_mIoU', self.model.part_mIoU_tracker.result(), step=epoch)
+                elif self.model.training_process == 2 or self.model.training_process == '2':
+                    tf.summary.scalar('eval_Transformation_Error', self.model.transformation_error_tracker.result(), step=epoch)
+                    tf.summary.scalar('eval_Shape_mIoU', self.model.shape_mIoU_tracker.result(), step=epoch)
+                else:
+                    tf.summary.scalar('eval_Transformation_Error', self.model.transformation_error_tracker.result(), step=epoch)
+                    tf.summary.scalar('eval_Part_mIoU', self.model.part_mIoU_tracker.result(), step=epoch)
+                    tf.summary.scalar('eval_Shape_mIoU', self.model.shape_mIoU_tracker.result(), step=epoch)
 
 
 def _execute_training_process(my_model,
@@ -149,9 +159,10 @@ def _execute_training_process(my_model,
                                                              save_weights_only=True,
                                                              mode='min')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=os.path.join(process_saved_path, 'logs'), profile_batch=0)
+    summary_writer = tf.summary.create_file_writer(os.path.join(process_saved_path, 'logs', 'validation'))
     lr_scheduler = _get_lr_scheduler(decay_rate, decay_step_size)
     lr_scheduler_callback = tf.keras.callbacks.LearningRateScheduler(lr_scheduler)
-    evaluation_callback = EvaluationCallback(test_set, tensorboard_callback)
+    evaluation_callback = EvaluationCallback(test_set, summary_writer)
     callbacks = [checkpoint_callback, tensorboard_callback, lr_scheduler_callback, evaluation_callback]
     opt = _get_optimizer(optimizer, lr)
     my_model.compile(optimizer=opt, run_eagerly=True)
