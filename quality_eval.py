@@ -110,7 +110,7 @@ def _visualize_pred_label(model,
     gt_shape = tf.convert_to_tensor(scipy.io.loadmat(shape_path)['data'], dtype=tf.float32)
     gt_shape = tf.expand_dims(gt_shape, 0)
     gt_shape = tf.expand_dims(gt_shape, 4)
-    model_output = model(gt_shape)
+    model_output = model(gt_shape, training=False)
     if visualize_decoded_part:
         pred = tf.squeeze(tf.where(model.stacked_decoded_parts > decoded_part_threshold, 1., 0.))
         pred = pred.numpy().astype('uint8')
