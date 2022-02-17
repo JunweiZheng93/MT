@@ -37,9 +37,11 @@ def evaluate_model(model_path,
     training_set, test_set = dataloader.get_dataset(category=hparam.hparam['category'], batch_size=hparam.hparam['batch_size'],
                                                     split_ratio=hparam.hparam['split_ratio'], max_num_parts=hparam.hparam['max_num_parts'])
 
-    transformation_error_tracker = tf.keras.metrics.Mean()
+    transformation_mse_tracker = tf.keras.metrics.Mean()
     part_mIoU_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
     shape_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
+    part_symmetry_score_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
+    shape_symmetry_score_tracker = tf.keras.metrics.MeanIoU(2)
 
     print('Your model is being evaluated, please wait...')
 
@@ -48,37 +50,47 @@ def evaluate_model(model_path,
             parts = my_model(x, training=False)
             parts = tf.transpose(tf.where(parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part, tracker in zip(labels, parts, part_mIoU_tracker_list):
-                tracker.update_state(gt, part)
+            for gt, part, part_mIoU_tracker, part_symmetry_tracker in zip(labels, parts, part_mIoU_tracker_list, part_symmetry_score_tracker_list):
+                part_mIoU_tracker.update_state(gt, part)
+                part_symmetry_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
+        for i in range(my_model.num_parts):
+            print(f'Part{i+1}_Symmetry_Score: {part_symmetry_score_tracker_list[i].result()}')
 
     elif hparam.hparam['training_process'] == 2 or hparam.hparam['training_process'] == '2':
         for x, labels, trans in test_set:
             theta = my_model(x, training=False)
-            trans_error = my_model._cal_transformation_loss(trans, theta) * 2 / my_model.num_parts
-            transformation_error_tracker.update_state(trans_error)
+            trans_mse = my_model._cal_transformation_loss(trans, theta) * 2 / my_model.num_parts
+            transformation_mse_tracker.update_state(trans_mse)
             shapes = model.Resampling()((my_model.stacked_decoded_parts, theta))
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             shape_mIoU_tracker.update_state(x, shapes)
-        print(f'Transformation_Error: {transformation_error_tracker.result()}')
+            shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
+        print(f'Transformation_MSE: {transformation_mse_tracker.result()}')
         print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
+        print(f'Shape_Symmetry_Score: {shape_symmetry_score_tracker.result()}')
 
     else:
         for x, labels, trans in test_set:
             shapes = my_model(x, training=False)
-            trans_error = my_model._cal_transformation_loss(trans, my_model.theta) * 2 / my_model.num_parts
-            transformation_error_tracker.update_state(trans_error)
+            trans_mse = my_model._cal_transformation_loss(trans, my_model.theta) * 2 / my_model.num_parts
+            transformation_mse_tracker.update_state(trans_mse)
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             parts = tf.transpose(tf.where(my_model.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part, tracker in zip(labels, parts, part_mIoU_tracker_list):
-                tracker.update_state(gt, part)
+            for gt, part, part_mIoU_tracker, part_symmetry_score_tracker in zip(labels, parts, part_mIoU_tracker_list, part_symmetry_score_tracker_list):
+                part_mIoU_tracker.update_state(gt, part)
+                part_symmetry_score_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
             shape_mIoU_tracker.update_state(x, shapes)
+            shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
-        print(f'Transformation_Error: {transformation_error_tracker.result()}')
+        for i in range(my_model.num_parts):
+            print(f'Part{i + 1}_Symmetry_Score: {part_symmetry_score_tracker_list[i].result()}')
+        print(f'Transformation_MSE: {transformation_mse_tracker.result()}')
         print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
+        print(f'Shape_Symmetry_Score: {shape_symmetry_score_tracker.result()}')
 
 
 def configure_gpu(which_gpu):
@@ -87,6 +99,44 @@ def configure_gpu(which_gpu):
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
             tf.config.experimental.set_visible_devices(gpus[which_gpu], "GPU")
+
+
+def flip(input_fmap):
+
+    B = input_fmap.shape[0]
+    H = input_fmap.shape[1]
+    W = input_fmap.shape[2]
+    D = input_fmap.shape[3]
+
+    x = tf.cast(tf.linspace(0, W - 1, W), dtype=tf.uint8)
+    y = tf.cast(tf.linspace(0, H - 1, H), dtype=tf.uint8)
+    z = tf.cast(tf.linspace(0, D - 1, D), dtype=tf.uint8)
+    x_t, y_t, z_t = tf.meshgrid(x, y, z)
+
+    x_t_flat = tf.reshape(x_t, [-1])
+    y_t_flat = tf.reshape(y_t, [-1])
+    z_t_flat = tf.reshape(z_t, [-1])
+
+    ones = tf.ones_like(x_t_flat, dtype=tf.uint8)
+    sampling_grid = tf.stack([y_t_flat, x_t_flat, z_t_flat, ones])
+    sampling_grid = tf.expand_dims(sampling_grid, axis=0)
+    sampling_grid = tf.tile(sampling_grid, [B, 1, 1])
+    sampling_grid = tf.cast(sampling_grid, 'float32')
+
+    theta = tf.constant([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, -1, D-1]], dtype='float32')
+    theta = tf.expand_dims(theta, axis=0)
+    theta = tf.tile(theta, [B, 1, 1])
+
+    batch_grids = theta @ sampling_grid
+    batch_grids = tf.reshape(batch_grids, [B, 3, H, W, D])
+    batch_grids = tf.cast(batch_grids, dtype='int32')
+
+    y_s = batch_grids[:, 0, :, :, :]
+    x_s = batch_grids[:, 1, :, :, :]
+    z_s = batch_grids[:, 2, :, :, :]
+
+    indices = tf.stack([y_s, x_s, z_s], axis=4)
+    return tf.gather_nd(input_fmap, indices, batch_dims=1)
 
 
 if __name__ == '__main__':

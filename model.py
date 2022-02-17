@@ -9,23 +9,20 @@ class BinaryShapeEncoder(keras.layers.Layer):
     def __init__(self, **kwargs):
         super(BinaryShapeEncoder, self).__init__(**kwargs)
 
-        self.conv1 = layers.Conv3D(16, 5, (1, 1, 1), padding='same')
-        self.conv2 = layers.Conv3D(32, 5, (2, 2, 2), padding='same')
-        self.conv3 = layers.Conv3D(64, 5, (2, 2, 2), padding='same')
-        self.conv4 = layers.Conv3D(128, 3, (2, 2, 2), padding='same')
-        self.conv5 = layers.Conv3D(256, 3, (2, 2, 2), padding='same')
+        self.conv1 = layers.Conv3D(32, 4, (2, 2, 2), padding='same')
+        self.conv2 = layers.Conv3D(64, 4, (2, 2, 2), padding='same')
+        self.conv3 = layers.Conv3D(128, 4, (2, 2, 2), padding='same')
+        self.conv4 = layers.Conv3D(256, 4, (2, 2, 2), padding='same')
 
         self.act1 = layers.LeakyReLU()
         self.act2 = layers.LeakyReLU()
         self.act3 = layers.LeakyReLU()
         self.act4 = layers.LeakyReLU()
-        self.act5 = layers.LeakyReLU()
 
         self.bn1 = layers.BatchNormalization()
         self.bn2 = layers.BatchNormalization()
         self.bn3 = layers.BatchNormalization()
         self.bn4 = layers.BatchNormalization()
-        self.bn5 = layers.BatchNormalization()
 
         self.flat = layers.Flatten()
         self.fc = layers.Dense(100, use_bias=False)
@@ -48,10 +45,6 @@ class BinaryShapeEncoder(keras.layers.Layer):
         x = self.conv4(x)
         x = self.act4(x)
         x = self.bn4(x, training=training)
-
-        x = self.conv5(x)
-        x = self.act5(x)
-        x = self.bn5(x, training=training)
 
         x = self.flat(x)
         outputs = self.fc(x)
@@ -99,44 +92,38 @@ class SharedPartDecoder(keras.layers.Layer):
         self.reshape = layers.Reshape((2, 2, 2, 256))
 
         # inputs should be in the shape of (B, D, H, W, C)
-        self.deconv1 = layers.Conv3DTranspose(128, 3, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
-        self.deconv2 = layers.Conv3DTranspose(64, 3, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
-        self.deconv3 = layers.Conv3DTranspose(32, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
-        self.deconv4 = layers.Conv3DTranspose(16, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0))
-        self.deconv5 = layers.Conv3DTranspose(1, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1), activation='sigmoid')
-        # self.deconv4 = layers.Conv3DTranspose(16, 5, (2, 2, 2), padding='same', output_padding=(1, 1, 1))
-        # self.deconv5 = layers.Conv3D(1, 5, (1, 1, 1), padding='same', activation='sigmoid')
-        # self.deconv5 = layers.Conv3DTranspose(1, 5, (1, 1, 1), padding='same', output_padding=(0, 0, 0), activation='sigmoid')
+        self.deconv1 = layers.Conv3DTranspose(128, 4, (2, 2, 2), padding='same')
+        self.deconv2 = layers.Conv3DTranspose(64, 4, (2, 2, 2), padding='same')
+        self.deconv3 = layers.Conv3DTranspose(32, 4, (2, 2, 2), padding='same')
+        self.deconv4 = layers.Conv3DTranspose(1, 4, (2, 2, 2), padding='same', activation='sigmoid')
 
         self.act = layers.LeakyReLU()
         self.act1 = layers.LeakyReLU()
         self.act2 = layers.LeakyReLU()
         self.act3 = layers.LeakyReLU()
-        self.act4 = layers.LeakyReLU()
 
         self.bn = layers.BatchNormalization()
         self.bn1 = layers.BatchNormalization()
         self.bn2 = layers.BatchNormalization()
         self.bn3 = layers.BatchNormalization()
-        self.bn4 = layers.BatchNormalization()
 
         self.dropout = layers.Dropout(0.2)
         self.dropout1 = layers.Dropout(0.2)
         self.dropout2 = layers.Dropout(0.2)
         self.dropout3 = layers.Dropout(0.2)
-        self.dropout4 = layers.Dropout(0.2)
 
     def call(self, inputs, training=False):
 
         # inputs should be in the shape of (batch_size, num_dimension)
         x = self.fc(inputs)
-        self.out1 = self.act(x)
-        x = self.bn(self.out1, training=training)
-        x = self.dropout(x, training=training)
 
+        x = self.act(x)
+        self.out1 = self.reshape(x)
+
+        x = self.bn(x, training=training)
+        x = self.dropout(x, training=training)
         x = self.reshape(x)
 
-        # inputs should be in the shape of (B, D, H, W, C)
         x = self.deconv1(x)
         self.out2 = self.act1(x)
         x = self.bn1(self.out2, training=training)
@@ -152,13 +139,7 @@ class SharedPartDecoder(keras.layers.Layer):
         x = self.bn3(self.out4, training=training)
         x = self.dropout3(x, training=training)
 
-        x = self.deconv4(x)
-        self.out5 = self.act4(x)
-        x = self.bn4(self.out5, training=training)
-        x = self.dropout4(x, training=training)
-
-        # outputs = self.conv5(x)
-        outputs = self.deconv5(x)
+        outputs = self.deconv4(x)
 
         return outputs
 
@@ -574,7 +555,7 @@ class Model(keras.Model):
         self.total_loss_tracker = tf.keras.metrics.Mean()
 
         # create some evaluation tracker
-        self.transformation_error_tracker = tf.keras.metrics.Mean()
+        self.transformation_mse_tracker = tf.keras.metrics.Mean()
         self.part_mIoU_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(num_parts)]
         self.shape_mIoU_tracker = tf.keras.metrics.Mean(2)
 
@@ -594,7 +575,7 @@ class Model(keras.Model):
 
             elif self.training_process == 2 or self.training_process == '2':
                 decomposer_output = self.decomposer(inputs, training=training)
-                out1, out2, out3, out4, out5, decoder_outputs = [], [], [], [], [], []
+                out1, out2, out3, out4, decoder_outputs = [], [], [], [], []
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
                     decoder_output = self.part_decoder(each, training=training)
@@ -602,14 +583,12 @@ class Model(keras.Model):
                     out2.append(self.part_decoder.out2)
                     out3.append(self.part_decoder.out3)
                     out4.append(self.part_decoder.out4)
-                    out5.append(self.part_decoder.out5)
                     decoder_outputs.append(decoder_output)
                 # stacked_decoded_parts should be in the shape of (B, num_parts, H, W, D, C)
                 inter1 = tf.stack(out1, axis=1)
                 inter2 = tf.stack(out2, axis=1)
                 inter3 = tf.stack(out3, axis=1)
                 inter4 = tf.stack(out4, axis=1)
-                inter5 = tf.stack(out5, axis=1)
                 self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
                 self.attention_output_list = list()
                 for i, each_attention in enumerate(self.attention_layer_list):
@@ -624,11 +603,9 @@ class Model(keras.Model):
                     elif self.which_layer[i] is '4':
                         self.attention_output_list.append(each_attention(inter4, training=training))
                     elif self.which_layer[i] is '5':
-                        self.attention_output_list.append(each_attention(inter5, training=training))
-                    elif self.which_layer[i] is '6':
                         self.attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
                     else:
-                        raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, 5 and 6')
+                        raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, and 5')
                 if self.keep_channel:
                     temp = list()
                     for each in self.attention_output_list:
@@ -643,7 +620,7 @@ class Model(keras.Model):
 
             else:
                 decomposer_output = self.decomposer(inputs, training=training)
-                out1, out2, out3, out4, out5, decoder_outputs = [], [], [], [], [], []
+                out1, out2, out3, out4, decoder_outputs = [], [], [], [], []
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
                     decoder_output = self.part_decoder(each, training=training)
@@ -651,14 +628,12 @@ class Model(keras.Model):
                     out2.append(self.part_decoder.out2)
                     out3.append(self.part_decoder.out3)
                     out4.append(self.part_decoder.out4)
-                    out5.append(self.part_decoder.out5)
                     decoder_outputs.append(decoder_output)
                 # stacked_decoded_parts should be in the shape of (B, num_parts, H, W, D, C)
                 inter1 = tf.stack(out1, axis=1)
                 inter2 = tf.stack(out2, axis=1)
                 inter3 = tf.stack(out3, axis=1)
                 inter4 = tf.stack(out4, axis=1)
-                inter5 = tf.stack(out5, axis=1)
                 self.stacked_decoded_parts = tf.stack(decoder_outputs, axis=1)
                 self.attention_output_list = list()
                 for i, each_attention in enumerate(self.attention_layer_list):
@@ -673,11 +648,9 @@ class Model(keras.Model):
                     elif self.which_layer[i] is '4':
                         self.attention_output_list.append(each_attention(inter4, training=training))
                     elif self.which_layer[i] is '5':
-                        self.attention_output_list.append(each_attention(inter5, training=training))
-                    elif self.which_layer[i] is '6':
                         self.attention_output_list.append(each_attention(self.stacked_decoded_parts, training=training))
                     else:
-                        raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, 5 and 6')
+                        raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4 and 5')
                 if self.keep_channel:
                     temp = list()
                     for each in self.attention_output_list:
@@ -886,13 +859,13 @@ class Model(keras.Model):
                     loss.append(tf.math.square(pred[i] - pred[j]))
                 else:
                     continue
-        return tf.reduce_mean(loss)
+        return tf.reduce_sum(loss) / len(loss)
 
     @property
     def metrics(self):
         return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
                 self.extra_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker,
-                self.transformation_error_tracker, self.shape_mIoU_tracker] + self.part_mIoU_tracker_list
+                self.transformation_mse_tracker, self.shape_mIoU_tracker] + self.part_mIoU_tracker_list
 
     def test_step(self, data):
         x, labels, trans = data
@@ -906,18 +879,18 @@ class Model(keras.Model):
 
         if self.training_process == 2 or self.training_process == '2':
             theta = self(x, training=False)
-            trans_error = self._cal_transformation_loss(trans, theta) * 2 / self.num_parts
-            self.transformation_error_tracker.update_state(trans_error)
+            trans_mse = self._cal_transformation_loss(trans, theta) * 2 / self.num_parts
+            self.transformation_mse_tracker.update_state(trans_mse)
             shapes = Resampling()((self.stacked_decoded_parts, theta))
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             self.shape_mIoU_tracker.update_state(x, shapes)
-            return {'Transformation_Error': self.transformation_error_tracker.result(),
+            return {'Transformation_MSE': self.transformation_mse_tracker.result(),
                     'Shape_mIoU': self.shape_mIoU_tracker.result()}
 
         else:
             shapes = self(x, training=False)
-            trans_error = self._cal_transformation_loss(trans, self.theta) * 2 / self.num_parts
-            self.transformation_error_tracker.update_state(trans_error)
+            trans_mse = self._cal_transformation_loss(trans, self.theta) * 2 / self.num_parts
+            self.transformation_mse_tracker.update_state(trans_mse)
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             parts = tf.transpose(tf.where(self.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
@@ -925,7 +898,7 @@ class Model(keras.Model):
                 tracker.update_state(gt, part)
             self.shape_mIoU_tracker.update_state(x, shapes)
             metrics_dict = {f'Part{i+1}_mIoU': self.part_mIoU_tracker_list[i].result() for i in range(self.num_parts)}
-            dict1 = {'Transformation_Error': self.transformation_error_tracker.result(), 'Shape_mIoU': self.shape_mIoU_tracker.result()}
+            dict1 = {'Transformation_MSE': self.transformation_mse_tracker.result(), 'Shape_mIoU': self.shape_mIoU_tracker.result()}
             metrics_dict.update(dict1)
             return metrics_dict
 
