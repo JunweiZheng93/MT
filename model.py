@@ -557,6 +557,7 @@ class Model(keras.Model):
         # create some evaluation tracker
         self.transformation_mse_tracker = tf.keras.metrics.Mean()
         self.part_mIoU_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(num_parts)]
+        self.all_part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
         self.shape_mIoU_tracker = tf.keras.metrics.Mean(2)
 
     def call(self, inputs, training=False):
@@ -865,7 +866,7 @@ class Model(keras.Model):
     def metrics(self):
         return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
                 self.extra_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker,
-                self.transformation_mse_tracker, self.shape_mIoU_tracker] + self.part_mIoU_tracker_list
+                self.transformation_mse_tracker, self.all_part_mIoU_tracker, self.shape_mIoU_tracker] + self.part_mIoU_tracker_list
 
     def test_step(self, data):
         x, labels, trans = data
@@ -873,9 +874,13 @@ class Model(keras.Model):
             parts = self(x, training=False)
             parts = tf.transpose(tf.where(parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part, tracker in zip(labels, parts, self.part_mIoU_tracker_list):
-                tracker.update_state(gt, part)
-            return {f'Part{i+1}_mIoU': self.part_mIoU_tracker_list[i].result() for i in range(self.num_parts)}
+            for gt, part, part_mIoU_tracker in zip(labels, parts, self.part_mIoU_tracker_list):
+                part_mIoU_tracker.update_state(gt, part)
+                self.all_part_mIoU_tracker.update_state(gt, part)
+            metrics_dict = {f'Part{i+1}_mIoU': self.part_mIoU_tracker_list[i].result() for i in range(self.num_parts)}
+            dict1 = {'Part_mIoU': self.all_part_mIoU_tracker.result()}
+            metrics_dict.update(dict1)
+            return metrics_dict
 
         if self.training_process == 2 or self.training_process == '2':
             theta = self(x, training=False)
@@ -894,11 +899,13 @@ class Model(keras.Model):
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             parts = tf.transpose(tf.where(self.stacked_decoded_parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part, tracker in zip(labels, parts, self.part_mIoU_tracker_list):
-                tracker.update_state(gt, part)
+            for gt, part, part_mIoU_tracker in zip(labels, parts, self.part_mIoU_tracker_list):
+                part_mIoU_tracker.update_state(gt, part)
+                self.all_part_mIoU_tracker(gt, part)
             self.shape_mIoU_tracker.update_state(x, shapes)
             metrics_dict = {f'Part{i+1}_mIoU': self.part_mIoU_tracker_list[i].result() for i in range(self.num_parts)}
-            dict1 = {'Transformation_MSE': self.transformation_mse_tracker.result(), 'Shape_mIoU': self.shape_mIoU_tracker.result()}
+            dict1 = {'Part_mIoU': self.all_part_mIoU_tracker.result(), 'Transformation_MSE': self.transformation_mse_tracker.result(),
+                     'Shape_mIoU': self.shape_mIoU_tracker.result()}
             metrics_dict.update(dict1)
             return metrics_dict
 

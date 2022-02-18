@@ -39,6 +39,7 @@ def evaluate_model(model_path,
 
     transformation_mse_tracker = tf.keras.metrics.Mean()
     part_mIoU_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
+    all_part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
     shape_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
     part_symmetry_score_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
     shape_symmetry_score_tracker = tf.keras.metrics.MeanIoU(2)
@@ -52,9 +53,11 @@ def evaluate_model(model_path,
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
             for gt, part, part_mIoU_tracker, part_symmetry_tracker in zip(labels, parts, part_mIoU_tracker_list, part_symmetry_score_tracker_list):
                 part_mIoU_tracker.update_state(gt, part)
+                all_part_mIoU_tracker.update_state(gt, part)
                 part_symmetry_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
+        print(f'Part_mIoU: {all_part_mIoU_tracker.result()}')
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_Symmetry_Score: {part_symmetry_score_tracker_list[i].result()}')
 
@@ -81,11 +84,13 @@ def evaluate_model(model_path,
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
             for gt, part, part_mIoU_tracker, part_symmetry_score_tracker in zip(labels, parts, part_mIoU_tracker_list, part_symmetry_score_tracker_list):
                 part_mIoU_tracker.update_state(gt, part)
+                all_part_mIoU_tracker.update_state(gt, part)
                 part_symmetry_score_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
             shape_mIoU_tracker.update_state(x, shapes)
             shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
+        print(f'Part_mIoU: {all_part_mIoU_tracker.result()}')
         for i in range(my_model.num_parts):
             print(f'Part{i + 1}_Symmetry_Score: {part_symmetry_score_tracker_list[i].result()}')
         print(f'Transformation_MSE: {transformation_mse_tracker.result()}')

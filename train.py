@@ -128,13 +128,15 @@ class EvaluationCallback(tf.keras.callbacks.Callback):
                 if self.model.training_process == 1 or self.model.training_process == '1':
                     for i in range(self.model.num_parts):
                         tf.summary.scalar(f'eval_Part{i+1}_mIoU', self.model.part_mIoU_tracker_list[i].result(), step=epoch)
+                    tf.summary.scalar('eval_Part_mIoU', self.model.all_part_mIoU_tracker.result(), step=epoch)
                 elif self.model.training_process == 2 or self.model.training_process == '2':
-                    tf.summary.scalar('eval_Transformation_Error', self.model.transformation_error_tracker.result(), step=epoch)
+                    tf.summary.scalar('eval_Transformation_MSE', self.model.transformation_mse_tracker.result(), step=epoch)
                     tf.summary.scalar('eval_Shape_mIoU', self.model.shape_mIoU_tracker.result(), step=epoch)
                 else:
                     for i in range(self.model.num_parts):
                         tf.summary.scalar(f'eval_Part{i+1}_mIoU', self.model.part_mIoU_tracker_list[i].result(), step=epoch)
-                    tf.summary.scalar('eval_Transformation_Error', self.model.transformation_error_tracker.result(), step=epoch)
+                    tf.summary.scalar('eval_Part_mIoU', self.model.all_part_mIoU_tracker.result(), step=epoch)
+                    tf.summary.scalar('eval_Transformation_MSE', self.model.transformation_mse_tracker.result(), step=epoch)
                     tf.summary.scalar('eval_Shape_mIoU', self.model.shape_mIoU_tracker.result(), step=epoch)
 
 
