@@ -840,7 +840,7 @@ class Model(keras.Model):
 
     def _cal_part_reconstruction_loss(self, gt, pred):
         pred = tf.clip_by_value(pred, 1e-7, 1.-1e-7)
-        bce = tf.reduce_sum(-self.bce_weight * gt * tf.math.log(pred + 1e-7) - (1 - self.bce_weight) * (1 - gt) * tf.math.log(1 - pred + 1e-7), axis=(1, 2, 3, 4, 5))
+        bce = 2 * tf.reduce_sum(-self.bce_weight * gt * tf.math.log(pred + 1e-7) - (1 - self.bce_weight) * (1 - gt) * tf.math.log(1 - pred + 1e-7), axis=(1, 2, 3, 4, 5))
         return tf.reduce_mean(bce)
 
     @staticmethod
@@ -849,7 +849,7 @@ class Model(keras.Model):
 
     @staticmethod
     def _cal_transformation_loss(gt, pred):
-        return 2 * tf.nn.l2_loss(gt-pred) / (tf.cast(tf.shape(gt)[0], dtype=tf.float32) * tf.cast(tf.shape(gt)[1], dtype=tf.float32))
+        return tf.nn.l2_loss(gt-pred) / tf.cast(tf.shape(gt)[0], dtype=tf.float32)
 
     @staticmethod
     def _cal_extra_loss(pred):
@@ -882,7 +882,7 @@ class Model(keras.Model):
             metrics_dict.update(dict1)
             return metrics_dict
 
-        if self.training_process == 2 or self.training_process == '2':
+        elif self.training_process == 2 or self.training_process == '2':
             theta = self(x, training=False)
             trans_mse = self._cal_transformation_loss(trans, theta) * 2 / self.num_parts
             self.transformation_mse_tracker.update_state(trans_mse)
