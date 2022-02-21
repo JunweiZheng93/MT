@@ -26,9 +26,9 @@ hparam = {
     # ---------------- attention settings --------------------
 
     'use_attention': True,
-    'keep_channel': False,
+    'keep_channel': True,
     'use_extra_loss': False,
-    'which_layer': '0',
+    'which_layer': '0135',
     'num_blocks': 3,
     'num_heads': 8,
     'd_model': 128,  # dimension of the input tensor for attention block

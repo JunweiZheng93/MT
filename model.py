@@ -521,13 +521,13 @@ class Model(keras.Model):
                 self.part_decoder = SharedPartDecoder()
                 self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts, keep_channel) for i in range(len(which_layer))]
                 if keep_channel:
-                    self.conv = layers.Conv1D(1, 1, 1, padding='valid')
+                    self.conv_list = [layers.Conv1D(1, 1, 1, padding='valid') for i in range(len(which_layer))]
                 self.dense = layers.Dense(12)
             else:
                 self.part_decoder = SharedPartDecoder()
                 self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts, keep_channel) for i in range(len(which_layer))]
                 if keep_channel:
-                    self.conv = layers.Conv1D(1, 1, 1, padding='valid')
+                    self.conv_list = [layers.Conv1D(1, 1, 1, padding='valid') for i in range(len(which_layer))]
                 self.dense = layers.Dense(12)
                 self.resampling = Resampling()
         else:
@@ -604,11 +604,11 @@ class Model(keras.Model):
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, and 5')
                 if self.keep_channel:
                     self.temp = list()
-                    for each in self.attention_output_list:
+                    for each, conv in zip(self.attention_output_list, self.conv_list):
                         each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
                         each = tf.reduce_max(each, axis=3)  # max pooling
                         # each = tf.reduce_mean(each, axis=3)  # average pooling
-                        # each = tf.squeeze(self.conv(each))  # 1D convolution
+                        # each = tf.squeeze(conv(each))  # 1D convolution
                         self.temp.append(each)
                     concat_output = tf.concat(self.temp, axis=2)
                 else:
@@ -652,11 +652,11 @@ class Model(keras.Model):
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4 and 5')
                 if self.keep_channel:
                     self.temp = list()
-                    for each in self.attention_output_list:
+                    for each, conv in zip(self.attention_output_list, self.conv_list):
                         each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
                         each = tf.reduce_max(each, axis=3)  # max pooling
                         # each = tf.reduce_mean(each, axis=3)  # average pooling
-                        # each = tf.squeeze(self.conv(each))  # 1D convolution
+                        # each = tf.squeeze(conv(each))  # 1D convolution
                         self.temp.append(each)
                     concat_output = tf.concat(self.temp, axis=2)
                 else:
@@ -740,6 +740,9 @@ class Model(keras.Model):
                 for layer in self.attention_layer_list:
                     weights_list.extend(layer.trainable_weights)
                 weights_list.extend(self.dense.trainable_weights)
+                if self.keep_channel:
+                    for each_conv in self.conv_list:
+                        weights_list.extend(each_conv.trainable_weights)
                 with tf.GradientTape() as tape:
                     theta = self(x, training=True)
                     trans_loss = self._cal_transformation_loss(trans, theta)
