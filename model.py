@@ -9,10 +9,10 @@ class BinaryShapeEncoder(keras.layers.Layer):
     def __init__(self, **kwargs):
         super(BinaryShapeEncoder, self).__init__(**kwargs)
 
-        self.conv1 = layers.Conv3D(32, 4, (2, 2, 2), padding='same')
-        self.conv2 = layers.Conv3D(64, 4, (2, 2, 2), padding='same')
-        self.conv3 = layers.Conv3D(128, 4, (2, 2, 2), padding='same')
-        self.conv4 = layers.Conv3D(256, 4, (2, 2, 2), padding='same')
+        self.conv1 = layers.Conv3D(64, 4, (2, 2, 2), padding='same')
+        self.conv2 = layers.Conv3D(128, 4, (2, 2, 2), padding='same')
+        self.conv3 = layers.Conv3D(256, 4, (2, 2, 2), padding='same')
+        self.conv4 = layers.Conv3D(256, 4, (1, 1, 1), padding='valid')
 
         self.act1 = layers.LeakyReLU()
         self.act2 = layers.LeakyReLU()
@@ -25,7 +25,6 @@ class BinaryShapeEncoder(keras.layers.Layer):
         self.bn4 = layers.BatchNormalization()
 
         self.flat = layers.Flatten()
-        self.fc = layers.Dense(100, use_bias=False)
 
     def call(self, inputs, training=False):
 
@@ -46,8 +45,7 @@ class BinaryShapeEncoder(keras.layers.Layer):
         x = self.act4(x)
         x = self.bn4(x, training=training)
 
-        x = self.flat(x)
-        outputs = self.fc(x)
+        outputs = self.flat(x)
 
         return outputs
 
@@ -56,7 +54,7 @@ class Projection(keras.layers.Layer):
 
     def __init__(self, **kwargs):
         super(Projection, self).__init__(**kwargs)
-        self.fc = layers.Dense(100, use_bias=False)
+        self.fc = layers.Dense(256, use_bias=False)
 
     def call(self, inputs):
         outputs = self.fc(inputs)
@@ -88,13 +86,12 @@ class SharedPartDecoder(keras.layers.Layer):
         super(SharedPartDecoder, self).__init__(**kwargs)
 
         # inputs should be in the shape of (batch_size, num_dimension)
-        self.fc = layers.Dense(2*2*2*256)
-        self.reshape = layers.Reshape((2, 2, 2, 256))
+        self.reshape = layers.Reshape((1, 1, 1, 256))
 
         # inputs should be in the shape of (B, D, H, W, C)
-        self.deconv1 = layers.Conv3DTranspose(128, 4, (2, 2, 2), padding='same')
-        self.deconv2 = layers.Conv3DTranspose(64, 4, (2, 2, 2), padding='same')
-        self.deconv3 = layers.Conv3DTranspose(32, 4, (2, 2, 2), padding='same')
+        self.deconv1 = layers.Conv3DTranspose(256, 4, (1, 1, 1), padding='valid')
+        self.deconv2 = layers.Conv3DTranspose(128, 4, (2, 2, 2), padding='same')
+        self.deconv3 = layers.Conv3DTranspose(64, 4, (2, 2, 2), padding='same')
         self.deconv4 = layers.Conv3DTranspose(1, 4, (2, 2, 2), padding='same', activation='sigmoid')
 
         self.act = layers.LeakyReLU()
@@ -115,14 +112,8 @@ class SharedPartDecoder(keras.layers.Layer):
     def call(self, inputs, training=False):
 
         # inputs should be in the shape of (batch_size, num_dimension)
-        x = self.fc(inputs)
-
-        x = self.act(x)
-        self.out1 = self.reshape(x)
-
-        x = self.bn(x, training=training)
-        x = self.dropout(x, training=training)
-        x = self.reshape(x)
+        x = self.reshape(inputs)
+        self.out1 = x
 
         x = self.deconv1(x)
         self.out2 = self.act1(x)
@@ -432,7 +423,7 @@ class FeedForward(keras.layers.Layer):
 
     def __init__(self, d_model, **kwargs):
         super(FeedForward, self).__init__(**kwargs)
-        self.dense1 = keras.layers.Dense(1024, activation='relu')
+        self.dense1 = keras.layers.Dense(512, activation='relu')
         self.dense2 = keras.layers.Dense(d_model)
 
     def call(self, inputs):
@@ -529,10 +520,14 @@ class Model(keras.Model):
             elif training_process == 2 or training_process == '2':
                 self.part_decoder = SharedPartDecoder()
                 self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts, keep_channel) for i in range(len(which_layer))]
+                if keep_channel:
+                    self.conv = layers.Conv1D(1, 1, 1, padding='valid')
                 self.dense = layers.Dense(12)
             else:
                 self.part_decoder = SharedPartDecoder()
                 self.attention_layer_list = [AttentionLayer(num_blocks, num_heads, d_model, num_parts, keep_channel) for i in range(len(which_layer))]
+                if keep_channel:
+                    self.conv = layers.Conv1D(1, 1, 1, padding='valid')
                 self.dense = layers.Dense(12)
                 self.resampling = Resampling()
         else:
@@ -608,11 +603,14 @@ class Model(keras.Model):
                     else:
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4, and 5')
                 if self.keep_channel:
-                    temp = list()
+                    self.temp = list()
                     for each in self.attention_output_list:
-                        each = tf.transpose(each, (0, 2, 1, 3))
-                        temp.append(tf.reshape(each, (tf.shape(each)[0], tf.shape(each)[1], -1)))
-                    concat_output = tf.concat(temp, axis=2)
+                        each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
+                        each = tf.reduce_max(each, axis=3)  # max pooling
+                        # each = tf.reduce_mean(each, axis=3)  # average pooling
+                        # each = tf.squeeze(self.conv(each))  # 1D convolution
+                        self.temp.append(each)
+                    concat_output = tf.concat(self.temp, axis=2)
                 else:
                     concat_output = tf.concat(self.attention_output_list, axis=2)
                 dense_output = self.dense(concat_output)
@@ -653,11 +651,14 @@ class Model(keras.Model):
                     else:
                         raise ValueError('which_layer should be one or more of 0, 1, 2, 3, 4 and 5')
                 if self.keep_channel:
-                    temp = list()
+                    self.temp = list()
                     for each in self.attention_output_list:
-                        each = tf.transpose(each, (0, 2, 1, 3))
-                        temp.append(tf.reshape(each, (tf.shape(each)[0], tf.shape(each)[1], -1)))
-                    concat_output = tf.concat(temp, axis=2)
+                        each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
+                        each = tf.reduce_max(each, axis=3)  # max pooling
+                        # each = tf.reduce_mean(each, axis=3)  # average pooling
+                        # each = tf.squeeze(self.conv(each))  # 1D convolution
+                        self.temp.append(each)
+                    concat_output = tf.concat(self.temp, axis=2)
                 else:
                     concat_output = tf.concat(self.attention_output_list, axis=2)
                 dense_output = self.dense(concat_output)
@@ -745,7 +746,7 @@ class Model(keras.Model):
                     if self.use_extra_loss:
                         if len(self.attention_output_list) < 2:
                             raise ValueError('which_layer should at least contain 2 layers when use_extra_loss is True!')
-                        extra_loss = self._cal_extra_loss(self.attention_output_list)
+                        extra_loss = self._cal_extra_loss(self.temp) if self.keep_channel else self._cal_extra_loss(self.attention_output_list)
                         total_loss = trans_loss + extra_loss
                 if self.use_extra_loss:
                     grads = tape.gradient(total_loss, weights_list)
