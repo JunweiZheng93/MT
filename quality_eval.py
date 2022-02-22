@@ -51,7 +51,7 @@ def evaluate_model(model_path,
                            hparam.hparam['keep_channel'], hparam.hparam['use_extra_loss'], hparam.hparam['which_layer'],
                            hparam.hparam['num_blocks'], hparam.hparam['num_heads'], hparam.hparam['d_model'])
     my_model(warm_up_data)
-    my_model.load_weights(model_path, by_name=True)
+    my_model.load_weights(model_path, by_name=False)
 
     # evaluation for every mode
     if mode == 'batch':

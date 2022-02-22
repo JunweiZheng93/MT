@@ -50,13 +50,13 @@ def train_model(category='chair',
     elif training_process == 2 or training_process == '2':
         warm_up_data = training_set.__iter__().__next__()[0]
         my_model(warm_up_data)
-        my_model.load_weights(model_path, by_name=True)
+        my_model.load_weights(model_path, by_name=False)
         _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 2, use_attention, use_extra_loss, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
 
     elif training_process == 3 or training_process == '3':
         warm_up_data = training_set.__iter__().__next__()[0]
         my_model(warm_up_data)
-        my_model.load_weights(model_path, by_name=True)
+        my_model.load_weights(model_path, by_name=False)
         _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 3, use_attention, use_extra_loss, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
 
     else:
