@@ -608,7 +608,7 @@ class Model(keras.Model):
                         each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
                         each = tf.reduce_max(each, axis=3)  # max pooling
                         # each = tf.reduce_mean(each, axis=3)  # average pooling
-                        # each = tf.squeeze(conv(each))  # 1D convolution
+                        # each = tf.reshape(conv(each), (each.shape[0], each.shape[1], -1))  # 1D convolution
                         self.temp.append(each)
                     concat_output = tf.concat(self.temp, axis=2)
                 else:
@@ -656,7 +656,7 @@ class Model(keras.Model):
                         each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
                         each = tf.reduce_max(each, axis=3)  # max pooling
                         # each = tf.reduce_mean(each, axis=3)  # average pooling
-                        # each = tf.squeeze(conv(each))  # 1D convolution
+                        # each = tf.reshape(conv(each), (each.shape[0], each.shape[1], -1))  # 1D convolution
                         self.temp.append(each)
                     concat_output = tf.concat(self.temp, axis=2)
                 else:

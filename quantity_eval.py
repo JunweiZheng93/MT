@@ -23,7 +23,7 @@ def evaluate_model(model_path,
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     # load weights and warm up model
-    warm_up_data = tf.ones((2, H, W, D, C), dtype=tf.float32)
+    warm_up_data = tf.ones((1, H, W, D, C), dtype=tf.float32)
     model = importlib.import_module(f"results.{model_path.split('/')[-3]}.model")
     hparam = importlib.import_module(f"results.{model_path.split('/')[-3]}.hparam")
     my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['bce_weight'], hparam.hparam['training_process'],
