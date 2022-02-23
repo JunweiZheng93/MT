@@ -31,7 +31,7 @@ def evaluate_model(model_path,
                            hparam.hparam['which_layer'], hparam.hparam['num_blocks'], hparam.hparam['num_heads'],
                            hparam.hparam['d_model'])
     my_model(warm_up_data)
-    my_model.load_weights(model_path, by_name=False)
+    my_model.load_weights(model_path, by_name=True)
 
     # get dataset
     training_set, test_set = dataloader.get_dataset(category=hparam.hparam['category'], batch_size=hparam.hparam['batch_size'],

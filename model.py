@@ -423,7 +423,7 @@ class FeedForward(keras.layers.Layer):
 
     def __init__(self, d_model, **kwargs):
         super(FeedForward, self).__init__(**kwargs)
-        self.dense1 = keras.layers.Dense(512, activation='relu')
+        self.dense1 = keras.layers.Dense(1024, activation='relu')
         self.dense2 = keras.layers.Dense(d_model)
 
     def call(self, inputs):
@@ -606,9 +606,7 @@ class Model(keras.Model):
                     self.temp = list()
                     for each, conv in zip(self.attention_output_list, self.conv_list):
                         each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
-                        each = tf.reduce_max(each, axis=3)  # max pooling
-                        # each = tf.reduce_mean(each, axis=3)  # average pooling
-                        # each = tf.reshape(conv(each), (each.shape[0], each.shape[1], -1))  # 1D convolution
+                        each = tf.reshape(conv(each), (each.shape[0], each.shape[1], -1))  # 1D convolution
                         self.temp.append(each)
                     concat_output = tf.concat(self.temp, axis=2)
                 else:
@@ -654,9 +652,7 @@ class Model(keras.Model):
                     self.temp = list()
                     for each, conv in zip(self.attention_output_list, self.conv_list):
                         each = tf.transpose(each, (0, 2, 3, 1))  # channel is at last dimension
-                        each = tf.reduce_max(each, axis=3)  # max pooling
-                        # each = tf.reduce_mean(each, axis=3)  # average pooling
-                        # each = tf.reshape(conv(each), (each.shape[0], each.shape[1], -1))  # 1D convolution
+                        each = tf.reshape(conv(each), (each.shape[0], each.shape[1], -1))  # 1D convolution
                         self.temp.append(each)
                     concat_output = tf.concat(self.temp, axis=2)
                 else:
