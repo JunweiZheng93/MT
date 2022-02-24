@@ -780,7 +780,7 @@ class Model(keras.Model):
                 if self.use_extra_loss:
                     if len(self.attention_output_list) < 2:
                         raise ValueError('which_layer should at least contain 2 layers when use_extra_loss is True!')
-                    extra_loss = self._cal_extra_loss(self.attention_output_list)
+                    extra_loss = self._cal_extra_loss(self.temp) if self.keep_channel else self._cal_extra_loss(self.attention_output_list)
                     total_loss = pi_loss + part_recon_loss + trans_loss + extra_loss + shape_recon_loss
                 else:
                     total_loss = pi_loss + part_recon_loss + trans_loss + shape_recon_loss
