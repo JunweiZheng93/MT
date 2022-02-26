@@ -555,12 +555,13 @@ class Model(keras.Model):
         self.all_part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
         self.shape_mIoU_tracker = tf.keras.metrics.Mean(2)
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, decomposer_output=None):
 
         if self.use_attention:
             if self.training_process == 1 or self.training_process == '1':
                 # decomposer output has shape (B, num_parts, encoding_dims)
-                decomposer_output = self.decomposer(inputs, training=training)
+                if decomposer_output is None:
+                    decomposer_output = self.decomposer(inputs, training=training)
                 decoder_outputs = list()
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
@@ -570,7 +571,8 @@ class Model(keras.Model):
                 return self.stacked_decoded_parts
 
             elif self.training_process == 2 or self.training_process == '2':
-                decomposer_output = self.decomposer(inputs, training=training)
+                if decomposer_output is None:
+                    decomposer_output = self.decomposer(inputs, training=training)
                 out1, out2, out3, out4, decoder_outputs = [], [], [], [], []
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
@@ -616,7 +618,8 @@ class Model(keras.Model):
                 return self.theta
 
             else:
-                decomposer_output = self.decomposer(inputs, training=training)
+                if decomposer_output is None:
+                    decomposer_output = self.decomposer(inputs, training=training)
                 out1, out2, out3, out4, decoder_outputs = [], [], [], [], []
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
@@ -666,7 +669,8 @@ class Model(keras.Model):
         else:
             if self.training_process == 1 or self.training_process == '1':
                 # decomposer output has shape (B, num_parts, encoding_dims)
-                decomposer_output = self.decomposer(inputs, training=training)
+                if decomposer_output is None:
+                    decomposer_output = self.decomposer(inputs, training=training)
                 decoder_outputs = list()
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
@@ -677,7 +681,8 @@ class Model(keras.Model):
 
             elif self.training_process == 2 or self.training_process == '2':
                 # decomposer output has shape (B, num_parts, encoding_dims)
-                decomposer_output = self.decomposer(inputs, training=training)
+                if decomposer_output is None:
+                    decomposer_output = self.decomposer(inputs, training=training)
                 decoder_outputs = list()
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:
@@ -692,7 +697,8 @@ class Model(keras.Model):
 
             else:
                 # decomposer output has shape (B, num_parts, encoding_dims)
-                decomposer_output = self.decomposer(inputs, training=training)
+                if decomposer_output is None:
+                    decomposer_output = self.decomposer(inputs, training=training)
                 decoder_outputs = list()
                 decoder_inputs = tf.transpose(decomposer_output, (1, 0, 2))
                 for each in decoder_inputs:

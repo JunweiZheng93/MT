@@ -29,6 +29,15 @@ def evaluate_model(model_path,
                    D=32,
                    C=1,
                    which_gpu=0):
+
+    def _get_pred_label(pred):
+        code = 0
+        for idx, each_part in enumerate(pred):
+            code += each_part * 2 ** (idx + 1)
+        pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
+        pred_label = pred_label.numpy().astype('uint8')
+        return pred_label
+
     # disable warning and info message, only enable error message
     tf.get_logger().setLevel('ERROR')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -64,13 +73,6 @@ def evaluate_model(model_path,
             for i, part in enumerate(pred):
                 visualization.save_visualized_img(part, os.path.join(saved_dir, f'{shape_name}_part{i+1}_recon.png'))
         else:
-            def _get_pred_label(pred):
-                code = 0
-                for idx, each_part in enumerate(pred):
-                    code += each_part * 2 ** (idx + 1)
-                pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
-                pred_label = pred_label.numpy().astype('uint8')
-                return pred_label
             pred = tf.squeeze(tf.where(stacked_transformed_parts > 0.5, 1., 0.))
             pred_label = _get_pred_label(pred)
             visualization.save_visualized_img(pred_label, os.path.join(saved_dir, f'{shape_name}_shape_recon.png'))
