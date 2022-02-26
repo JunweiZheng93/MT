@@ -27,7 +27,7 @@ hparam = {
 
     'use_attention': True,
     'keep_channel': True,
-    'use_extra_loss': False,
+    'use_ac_loss': False,
     'which_layer': '0',
     'num_blocks': 3,
     'num_heads': 8,

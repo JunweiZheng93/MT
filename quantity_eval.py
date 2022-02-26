@@ -27,7 +27,7 @@ def evaluate_model(model_path,
     model = importlib.import_module(f"results.{model_path.split('/')[-3]}.model")
     hparam = importlib.import_module(f"results.{model_path.split('/')[-3]}.hparam")
     my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['bce_weight'], hparam.hparam['training_process'],
-                           hparam.hparam['use_attention'], hparam.hparam['keep_channel'], hparam.hparam['use_extra_loss'],
+                           hparam.hparam['use_attention'], hparam.hparam['keep_channel'], hparam.hparam['use_ac_loss'],
                            hparam.hparam['which_layer'], hparam.hparam['num_blocks'], hparam.hparam['num_heads'],
                            hparam.hparam['d_model'])
     my_model(warm_up_data)

@@ -501,14 +501,14 @@ class AttentionLayer(keras.layers.Layer):
 
 class Model(keras.Model):
 
-    def __init__(self, num_parts, bce_weight, training_process, use_attention, keep_channel, use_extra_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
+    def __init__(self, num_parts, bce_weight, training_process, use_attention, keep_channel, use_ac_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
         super(Model, self).__init__(**kwargs)
         self.num_parts = num_parts
         self.bce_weight = bce_weight
         self.training_process = training_process
         self.use_attention = use_attention
         self.keep_channel = keep_channel
-        self.use_extra_loss = use_extra_loss
+        self.use_ac_loss = use_ac_loss
         self.which_layer = which_layer
 
         # build layers
@@ -545,7 +545,7 @@ class Model(keras.Model):
         self.pi_loss_tracker = tf.keras.metrics.Mean()
         self.part_reconstruction_loss_tracker = tf.keras.metrics.Mean()
         self.transformation_loss_tracker = tf.keras.metrics.Mean()
-        self.extra_loss_tracker = tf.keras.metrics.Mean()
+        self.ac_loss_tracker = tf.keras.metrics.Mean()
         self.shape_reconstruction_loss_tracker = tf.keras.metrics.Mean()
         self.total_loss_tracker = tf.keras.metrics.Mean()
 
@@ -748,19 +748,19 @@ class Model(keras.Model):
                 with tf.GradientTape() as tape:
                     theta = self(x, training=True)
                     trans_loss = self._cal_transformation_loss(trans, theta)
-                    if self.use_extra_loss:
+                    if self.use_ac_loss:
                         if len(self.attention_output_list) < 2:
-                            raise ValueError('which_layer should at least contain 2 layers when use_extra_loss is True!')
-                        extra_loss = self._cal_extra_loss(self.temp) if self.keep_channel else self._cal_extra_loss(self.attention_output_list)
-                        total_loss = trans_loss + extra_loss
-                if self.use_extra_loss:
+                            raise ValueError('which_layer should at least contain 2 layers when use_ac_loss is True!')
+                        ac_loss = self._cal_ac_loss(self.temp) if self.keep_channel else self._cal_ac_loss(self.attention_output_list)
+                        total_loss = trans_loss + ac_loss
+                if self.use_ac_loss:
                     grads = tape.gradient(total_loss, weights_list)
                     self.optimizer.apply_gradients(zip(grads, weights_list))
                     self.transformation_loss_tracker.update_state(trans_loss)
-                    self.extra_loss_tracker.update_state(extra_loss)
+                    self.ac_loss_tracker.update_state(ac_loss)
                     self.total_loss_tracker.update_state(total_loss)
                     return {'Transformation_Loss': self.transformation_loss_tracker.result(),
-                            'Extra_Loss': self.extra_loss_tracker.result(),
+                            'AC_Loss': self.ac_loss_tracker.result(),
                             'Total_Loss': self.total_loss_tracker.result()}
                 else:
                     grads = tape.gradient(trans_loss, weights_list)
@@ -783,26 +783,26 @@ class Model(keras.Model):
                 part_recon_loss = self._cal_part_reconstruction_loss(label, self.stacked_decoded_parts)
                 trans_loss = self._cal_transformation_loss(trans, self.theta)
                 shape_recon_loss = self._cal_shape_reconstruction_loss(x, tf.reduce_max(stacked_transformed_parts, axis=1))
-                if self.use_extra_loss:
+                if self.use_ac_loss:
                     if len(self.attention_output_list) < 2:
-                        raise ValueError('which_layer should at least contain 2 layers when use_extra_loss is True!')
-                    extra_loss = self._cal_extra_loss(self.temp) if self.keep_channel else self._cal_extra_loss(self.attention_output_list)
-                    total_loss = pi_loss + part_recon_loss + trans_loss + extra_loss + shape_recon_loss
+                        raise ValueError('which_layer should at least contain 2 layers when use_ac_loss is True!')
+                    ac_loss = self._cal_ac_loss(self.temp) if self.keep_channel else self._cal_ac_loss(self.attention_output_list)
+                    total_loss = pi_loss + part_recon_loss + trans_loss + ac_loss + shape_recon_loss
                 else:
                     total_loss = pi_loss + part_recon_loss + trans_loss + shape_recon_loss
-            if self.use_extra_loss:
+            if self.use_ac_loss:
                 grads = tape.gradient(total_loss, self.trainable_weights)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
                 self.pi_loss_tracker.update_state(pi_loss)
                 self.part_reconstruction_loss_tracker.update_state(part_recon_loss)
                 self.transformation_loss_tracker.update_state(trans_loss)
-                self.extra_loss_tracker.update_state(extra_loss)
+                self.ac_loss_tracker.update_state(ac_loss)
                 self.shape_reconstruction_loss_tracker.update_state(shape_recon_loss)
                 self.total_loss_tracker.update_state(total_loss)
                 return {'PI_Loss': self.pi_loss_tracker.result(),
                         'Part_Recon_Loss': self.part_reconstruction_loss_tracker.result(),
                         'Transformation_Loss': self.transformation_loss_tracker.result(),
-                        'Extra_Loss': self.extra_loss_tracker.result(),
+                        'AC_Loss': self.ac_loss_tracker.result(),
                         'Shape_Recon_Loss': self.shape_reconstruction_loss_tracker.result(),
                         'Total_Loss': self.total_loss_tracker.result()}
             else:
@@ -858,7 +858,7 @@ class Model(keras.Model):
         return tf.nn.l2_loss(gt-pred) / tf.cast(tf.shape(gt)[0], dtype=tf.float32)
 
     @staticmethod
-    def _cal_extra_loss(pred):
+    def _cal_ac_loss(pred):
         loss = list()
         for i in range(len(pred)):
             for j in range(len(pred)):
@@ -871,7 +871,7 @@ class Model(keras.Model):
     @property
     def metrics(self):
         return [self.pi_loss_tracker, self.part_reconstruction_loss_tracker, self.transformation_loss_tracker,
-                self.extra_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker,
+                self.ac_loss_tracker, self.shape_reconstruction_loss_tracker, self.total_loss_tracker,
                 self.transformation_mse_tracker, self.all_part_mIoU_tracker, self.shape_mIoU_tracker] + self.part_mIoU_tracker_list
 
     def test_step(self, data):
