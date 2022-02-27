@@ -52,8 +52,8 @@ def save_visualized_img(x, save_dir, max_num_parts=8, cmap='Set2', show_axis=Fal
     :return:
     """
     x = np.transpose(x, (0, 2, 1))
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
+    fig = plt.figure(figsize=(3.2, 2.4))
+    ax = fig.add_axes([0, 0, 1, 1], projection='3d')
     new_cmap = get_cmap(max_num_parts, cmap)
     label_color = np.take(new_cmap, x, axis=0)
     ax.voxels(x, facecolors=label_color)

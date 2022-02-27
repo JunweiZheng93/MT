@@ -10,6 +10,7 @@ import argparse
 from tqdm import tqdm
 from utils.dataloader import Dataset
 from utils import visualization
+import shutil
 
 
 CHERRY_CHAIRS = ['54e2aa868107826f3dbc2ce6b9d89f11', '5042005e178d164481d0f12b8bf5c990', 'b8e4d2f12e740739b6c7647742d948e',
@@ -57,15 +58,16 @@ def evaluate_model(model_path,
 
     test_set, shape_paths = get_dataset(hparam.hparam['category'], 1, hparam.hparam['max_num_parts'])
 
+    saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'cherry_picks')
+    if os.path.exists(saved_dir):
+        shutil.rmtree(saved_dir)
+    os.makedirs(saved_dir)
     print('Generating images for cherry picks, please wait...')
     for (voxel_grid, label, trans), shape_path in tqdm(zip(test_set, shape_paths), total=len(shape_paths)):
         stacked_transformed_parts = my_model(voxel_grid, training=False)
         gt_label_path = os.path.join(shape_path, 'object_labeled.mat')
         gt_label = scipy.io.loadmat(gt_label_path)['data']
         shape_name = gt_label_path.split('/')[-2]
-        saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'cherry_picks')
-        if not os.path.exists(saved_dir):
-            os.makedirs(saved_dir)
         visualization.save_visualized_img(gt_label, os.path.join(saved_dir, f'{shape_name}_gt.png'))
         if hparam.hparam['training_process'] == 1 or hparam.hparam['training_process'] == '1':
             pred = tf.squeeze(tf.where(my_model.stacked_decoded_parts > 0.5, 1., 0.))
