@@ -3,7 +3,7 @@ import sys
 import os
 PROJ_ROOT = os.path.abspath(__file__)[:-14]
 sys.path.append(PROJ_ROOT)
-from utils.cherry_pick import configure_gpu, CHERRY_CHAIRS
+from utils.cherry_pick import configure_gpu
 from utils.dataloader import CATEGORY_MAP
 import importlib
 import scipy.io
