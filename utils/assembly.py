@@ -10,12 +10,13 @@ import scipy.io
 import numpy as np
 from utils import visualization
 import argparse
-import shutil
 from utils import stack_plot
+from tensorflow.keras.utils import Progbar
 
 
 def assembly(model_path,
              shape,
+             seed=0,
              category='chair',
              visualize=False,
              H_crop_factor=0.2,
@@ -66,12 +67,19 @@ def assembly(model_path,
         labeled_shape_list.append(labeled_shape)
     unlabeled_shape = tf.cast(tf.stack(unlabeled_shape_list, axis=0), dtype=tf.float32)
 
+    base_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'assembly')
     saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'assembly')
-    if os.path.exists(saved_dir):
-        shutil.rmtree(saved_dir)
-    os.makedirs(saved_dir)
+    count = 0
+    while True:
+        if os.path.exists(saved_dir):
+            saved_dir = f'{base_dir}_{count}'
+            count += 1
+            continue
+        else:
+            os.makedirs(saved_dir)
+            break
 
-    mixed_latent = assemble_latent(my_model, unlabeled_shape)
+    mixed_latent = assemble_latent(my_model, unlabeled_shape, seed)
 
     # mixed reconstruction
     fake_input = 0
@@ -88,22 +96,27 @@ def assembly(model_path,
             mixed_output = _get_pred_label(mixed_output)
             visualization.visualize(mixed_output)
 
+    pb = Progbar(len(labeled_shape_list))
     print('Saving images, please wait...')
-    for gt, mixed_output, code in zip(labeled_shape_list, mixed_outputs, shape):
+    for count, (gt, mixed_output, code) in enumerate(zip(labeled_shape_list, mixed_outputs, shape)):
         mixed_output = tf.squeeze(tf.where(mixed_output > 0.5, 1., 0.))
         mixed_output = _get_pred_label(mixed_output)
         visualization.save_visualized_img(gt, os.path.join(saved_dir, f'{code}_gt.png'))
         visualization.save_visualized_img(mixed_output, os.path.join(saved_dir, f'{code}_assembled.png'))
+        pb.update(count+1)
+    print('Stacking all images together, please wait...')
     stack_plot.stack_assembly_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
+    print(f'Done! All images are saved in {saved_dir}')
 
 
-def assemble_latent(my_model, unlabeled_shape):
+def assemble_latent(my_model, unlabeled_shape, seed):
 
     # get latent representation
     latent = my_model.decomposer(unlabeled_shape, training=False)
 
     # mix latent representation
     mixed_order_list = list()
+    np.random.seed(seed)
     for i in range(latent.shape[1]):
         mixed_order_list.append(np.random.choice(latent.shape[0], latent.shape[0], False))
     latent = tf.transpose(latent, (1, 0, 2))
@@ -120,7 +133,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('model_path', help='path of the model')
-    parser.add_argument('-s', '--shape', nargs='+', help='hash code of the shapes to be assembled.')
+    parser.add_argument('-s', '--shape', nargs='+', help='hash code of the shapes to be assembled.', default=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48', 'cd9702520ad57689bbc7a6acbd8f058b', '5042005e178d164481d0f12b8bf5c990'])
+    parser.add_argument('--seed', default=6, help='seed for the random mixed order. Default is 6')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
@@ -136,6 +150,7 @@ if __name__ == '__main__':
 
     assembly(model_path=args.model_path,
              shape=args.shape,
+             seed=int(args.seed),
              category=args.category,
              visualize=args.visualize,
              H_crop_factor=float(args.H_crop_factor),

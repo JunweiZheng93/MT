@@ -10,8 +10,8 @@ import scipy.io
 import numpy as np
 from utils import visualization
 import argparse
-import shutil
 from utils import stack_plot
+from tensorflow.keras.utils import Progbar
 
 
 def interpolation(model_path,
@@ -67,10 +67,17 @@ def interpolation(model_path,
     labeled_shape2 = scipy.io.loadmat(labeled_path2)['data']
     unlabeled_shape = tf.cast(tf.stack((unlabeled_shape1, unlabeled_shape2), axis=0), dtype=tf.float32)
 
+    base_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'interpolation')
     saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'interpolation')
-    if os.path.exists(saved_dir):
-        shutil.rmtree(saved_dir)
-    os.makedirs(saved_dir)
+    count = 0
+    while True:
+        if os.path.exists(saved_dir):
+            saved_dir = f'{base_dir}_{count}'
+            count += 1
+            continue
+        else:
+            os.makedirs(saved_dir)
+            break
 
     shape_latent, part_latent = interpolate_latent(my_model, unlabeled_shape, which_part)
 
@@ -98,24 +105,29 @@ def interpolation(model_path,
             visualization.visualize(part_output, title=shape1)
         visualization.visualize(labeled_shape2, title=shape2)
 
-    print('Saving images, please wait...')
-    visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'gt_{shape1}.png'))
-    visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'gt_{shape2}.png'))
+    print('Saving ground truth images, please wait...')
+    visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'gt_0_{shape1}.png'))
+    visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'gt_1_{shape2}.png'))
 
+    pb = Progbar(shape_outputs.shape[0])
+    print('Saving interpolated images, please wait...')
     for count, (shape_output, part_output) in enumerate(zip(shape_outputs, part_outputs)):
         shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
         shape_output = _get_pred_label(shape_output)
         part_output = tf.squeeze(tf.where(part_output > 0.5, 1., 0.))
         part_output = _get_pred_label(part_output)
         if count == 0:
-            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_{shape1}.png'))
+            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_0_{shape1}.png'))
         elif count == 9:
-            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_{shape2}.png'))
+            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_1_{shape2}.png'))
         else:
             visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'shape_{count}_{shape1}.png'))
             visualization.save_visualized_img(part_output, os.path.join(saved_dir, f'part{which_part}_{count}_{shape1}.png'))
+        pb.update(current=count+1)
 
+    print('Stacking all images together, please wait...')
     stack_plot.stack_interpolation_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
+    print(f'Done! All images are saved in {saved_dir}')
 
 
 def interpolate_latent(my_model, unlabeled_shape, which_part):
@@ -153,9 +165,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('model_path', help='path of the model')
-    parser.add_argument('-w', '--which_part', help='which part to be interpolated')
-    parser.add_argument('-s1', '--shape1', help='hash code of the first full shape.')
-    parser.add_argument('-s2', '--shape2', help='hash code of the second full shape.')
+    parser.add_argument('-w', '--which_part', default=1, help='which part to be interpolated')
+    parser.add_argument('-s1', '--shape1', default='54e2aa868107826f3dbc2ce6b9d89f11', help='hash code of the first full shape.')
+    parser.add_argument('-s2', '--shape2', default='3c408a4ad6d57c3651bc6269fcd1b4c0', help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')

@@ -11,9 +11,9 @@ import numpy as np
 from copy import deepcopy
 from utils import visualization
 import argparse
-import shutil
 import warnings
 from utils import stack_plot
+from tensorflow.keras.utils import Progbar
 
 
 def swap(model_path,
@@ -78,12 +78,20 @@ def swap(model_path,
         unlabeled_shape_list.append(tf.cast(tf.stack((unlabeled_shape1, unlabeled_shape2), axis=0), dtype=tf.float32))
         labeled_shape_list.append([labeled_shape1, labeled_shape2])
 
+    base_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'swap')
     saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'swap')
-    if os.path.exists(saved_dir):
-        shutil.rmtree(saved_dir)
-    os.makedirs(saved_dir)
+    count = 0
+    while True:
+        if os.path.exists(saved_dir):
+            saved_dir = f'{base_dir}_{count}'
+            count += 1
+            continue
+        else:
+            os.makedirs(saved_dir)
+            break
 
-    print('Generating swapped images, please wait...')
+    pb = Progbar(len(labeled_shape_list))
+    print('Saving swapped images, please wait...')
     for count, (unlabeled_shape, labeled_shape, hash_code, which) in enumerate(zip(unlabeled_shape_list, labeled_shape_list, hash_codes, which_part)):
         latent, swapped_latent = swap_latent(my_model, unlabeled_shape, int(which))
 
@@ -110,14 +118,15 @@ def swap(model_path,
                 visualization.visualize(swapped_output, title=code)
 
         # save every single images
-        for gt, output, swapped_output, code in zip(labeled_shape, outputs, swapped_outputs, hash_code):
+        for i, (gt, output, swapped_output, code) in enumerate(zip(labeled_shape, outputs, swapped_outputs, hash_code)):
             output = tf.squeeze(tf.where(output > 0.5, 1., 0.))
             output = _get_pred_label(output)
             swapped_output = tf.squeeze(tf.where(swapped_output > 0.5, 1., 0.))
             swapped_output = _get_pred_label(swapped_output)
-            visualization.save_visualized_img(gt, os.path.join(saved_dir, f'{count}_{code}_gt.png'))
-            visualization.save_visualized_img(output, os.path.join(saved_dir, f'{count}_{code}_recon.png'))
-            visualization.save_visualized_img(swapped_output, os.path.join(saved_dir, f'{count}_{code}_swap_part{int(which)}.png'))
+            visualization.save_visualized_img(gt, os.path.join(saved_dir, f'{count}{i}_{code}_gt.png'))
+            visualization.save_visualized_img(output, os.path.join(saved_dir, f'{count}{i}_{code}_recon.png'))
+            visualization.save_visualized_img(swapped_output, os.path.join(saved_dir, f'{count}{i}_{code}_swap_part{int(which)}.png'))
+        pb.update(count+1)
 
     print('Stacking all images together, please wait...')
     # save stacked images for paper
@@ -125,6 +134,7 @@ def swap(model_path,
         warnings.warn(f'stacked images will not be saved, because there are not exact 12 images in {saved_dir}')
     else:
         stack_plot.stack_swapped_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
+        print(f'Done! All images are saved in {saved_dir}')
 
 
 def swap_latent(my_model, unlabeled_shape, which_part):
@@ -148,9 +158,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('model_path', help='path of the model')
-    parser.add_argument('-w', '--which_part', nargs='+', help='which part to be swapped')
-    parser.add_argument('-s1', '--shape1', nargs='+', help='hash code of the first full shape.')
-    parser.add_argument('-s2', '--shape2', nargs='+', help='hash code of the second full shape.')
+    parser.add_argument('-w', '--which_part', default=[1, 3], nargs='+', help='which part to be swapped')
+    parser.add_argument('-s1', '--shape1', default=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48'], nargs='+', help='hash code of the first full shape.')
+    parser.add_argument('-s2', '--shape2', default=['9d7d7607e1ba099bd98e59dfd5823115', '54e2aa868107826f3dbc2ce6b9d89f11'], nargs='+', help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')

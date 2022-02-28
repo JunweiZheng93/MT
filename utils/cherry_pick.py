@@ -7,21 +7,20 @@ import importlib
 import scipy.io
 import numpy as np
 import argparse
-from tqdm import tqdm
 from utils.dataloader import Dataset
 from utils import visualization
 import shutil
+from tensorflow.keras.utils import Progbar
 
 
 CHERRY_CHAIRS = ['54e2aa868107826f3dbc2ce6b9d89f11', '5042005e178d164481d0f12b8bf5c990', 'b8e4d2f12e740739b6c7647742d948e',
-                 '9e145541bf7e278d19fb4103277a6b93', '2207db2fa2e4cc4579b3e1be3524f72f', '2a87cf850dca72a4a886e56ff3d54c4',
+                 '2207db2fa2e4cc4579b3e1be3524f72f', '2a87cf850dca72a4a886e56ff3d54c4', '3c408a4ad6d57c3651bc6269fcd1b4c0',
                  '9ab18a33335373b2659dda512294c744', '5b9ebc70e9a79b69c77d45d65dc3714', '1bbe463ba96415aff1783a44a88d6274',
                  'b2ded1854643f1451c1b3b2ed8d13bf8', 'dfc9e6a84553253ef91663a74ccd2338', '5893038d979ce1bb725c7e2164996f48',
                  '88aec853dcb10d526efa145e9f4a2693', '611f235819b7c26267d783b4714d4324', 'cd9702520ad57689bbc7a6acbd8f058b',
                  '2a56e3e2a6505ec492d9da2668ec34c', '5a643c0c638fc2c3ff3a3ae710d23d1e', '96929c12a4a6b15a492d9da2668ec34c',
                  '1b7ba5484399d36bc5e50b867ca2d0b9', '2fed64c67552aa689c1db271ad9472a7', '9d7d7607e1ba099bd98e59dfd5823115',
-                 '2031dca3aaeff940f7628281ecb18112', '875925d42780159ffebad4f49b26ec52', '2025aa3a71f3c468d16ba2cb1292d98a',
-                 '3c408a4ad6d57c3651bc6269fcd1b4c0']
+                 '875925d42780159ffebad4f49b26ec52', '2025aa3a71f3c468d16ba2cb1292d98a']
 
 
 def evaluate_model(model_path,
@@ -62,8 +61,10 @@ def evaluate_model(model_path,
     if os.path.exists(saved_dir):
         shutil.rmtree(saved_dir)
     os.makedirs(saved_dir)
-    print('Generating images for cherry picks, please wait...')
-    for (voxel_grid, label, trans), shape_path in tqdm(zip(test_set, shape_paths), total=len(shape_paths)):
+
+    pb = Progbar(len(shape_paths))
+    print('Saving images for cherry picks, please wait...')
+    for count, ((voxel_grid, label, trans), shape_path) in enumerate(zip(test_set, shape_paths)):
         stacked_transformed_parts = my_model(voxel_grid, training=False)
         gt_label_path = os.path.join(shape_path, 'object_labeled.mat')
         gt_label = scipy.io.loadmat(gt_label_path)['data']
@@ -78,6 +79,8 @@ def evaluate_model(model_path,
             pred = tf.squeeze(tf.where(stacked_transformed_parts > 0.5, 1., 0.))
             pred_label = _get_pred_label(pred)
             visualization.save_visualized_img(pred_label, os.path.join(saved_dir, f'{shape_name}_shape_recon.png'))
+        pb.update(count+1)
+    print(f'Done! All images are saved in {saved_dir}')
 
 
 def get_dataset(category, batch_size, max_num_parts):
