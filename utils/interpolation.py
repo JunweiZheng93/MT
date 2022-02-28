@@ -20,7 +20,6 @@ def interpolation(model_path,
                   shape2,
                   category='chair',
                   visualize=False,
-                  save_images=True,
                   H_crop_factor=0.2,
                   W_crop_factor=0.55,
                   H_shift=15,
@@ -75,7 +74,7 @@ def interpolation(model_path,
 
     shape_latent, part_latent = interpolate_latent(my_model, unlabeled_shape, which_part)
 
-    # get reconstruction and swapped reconstruction
+    # get reconstruction and interpolation reconstruction
     fake_input = 0
     shape_outputs = my_model(fake_input, training=False, decomposer_output=shape_latent)
     part_outputs = my_model(fake_input, training=False, decomposer_output=part_latent)
@@ -99,25 +98,24 @@ def interpolation(model_path,
             visualization.visualize(part_output, title=shape1)
         visualization.visualize(labeled_shape2, title=shape2)
 
-    if save_images:
-        print('Saving images, please wait...')
-        visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'gt_{shape1}.png'))
-        visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'gt_{shape2}.png'))
+    print('Saving images, please wait...')
+    visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'gt_{shape1}.png'))
+    visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'gt_{shape2}.png'))
 
-        for count, (shape_output, part_output) in enumerate(zip(shape_outputs, part_outputs)):
-            shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
-            shape_output = _get_pred_label(shape_output)
-            part_output = tf.squeeze(tf.where(part_output > 0.5, 1., 0.))
-            part_output = _get_pred_label(part_output)
-            if count == 0:
-                visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_{shape1}.png'))
-            elif count == 9:
-                visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_{shape2}.png'))
-            else:
-                visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'shape_{count}_{shape1}.png'))
-                visualization.save_visualized_img(part_output, os.path.join(saved_dir, f'part{which_part}_{count}_{shape1}.png'))
+    for count, (shape_output, part_output) in enumerate(zip(shape_outputs, part_outputs)):
+        shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
+        shape_output = _get_pred_label(shape_output)
+        part_output = tf.squeeze(tf.where(part_output > 0.5, 1., 0.))
+        part_output = _get_pred_label(part_output)
+        if count == 0:
+            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_{shape1}.png'))
+        elif count == 9:
+            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_{shape2}.png'))
+        else:
+            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'shape_{count}_{shape1}.png'))
+            visualization.save_visualized_img(part_output, os.path.join(saved_dir, f'part{which_part}_{count}_{shape1}.png'))
 
-        stack_plot.stack_interpolation_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
+    stack_plot.stack_interpolation_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
 
 
 def interpolate_latent(my_model, unlabeled_shape, which_part):
@@ -155,12 +153,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('model_path', help='path of the model')
-    parser.add_argument('-w', '--which_part', help='which part to be swapped')
+    parser.add_argument('-w', '--which_part', help='which part to be interpolated')
     parser.add_argument('-s1', '--shape1', help='hash code of the first full shape.')
     parser.add_argument('-s2', '--shape2', help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
-    parser.add_argument('--save_img', default=True, help='save all generated images')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
     parser.add_argument('--W_crop_factor', default=0.55, help='Percentage to crop empty spcae of every single image in W direction. Only valid when save_img is True')
     parser.add_argument('--H_shift', default=15, help='How many pixels to be shifted for the cropping of every single image in H direction. Only valid when save_img is True')
@@ -178,7 +175,6 @@ if __name__ == '__main__':
                   shape2=args.shape2,
                   category=args.category,
                   visualize=args.visualize,
-                  save_images=bool(args.save_img),
                   H_crop_factor=float(args.H_crop_factor),
                   W_crop_factor=float(args.W_crop_factor),
                   H_shift=int(args.H_shift),

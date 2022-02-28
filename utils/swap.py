@@ -22,7 +22,6 @@ def swap(model_path,
          shape2,
          category='chair',
          visualize=False,
-         save_images=True,
          H_crop_factor=0.2,
          W_crop_factor=0.55,
          H_shift=15,
@@ -110,24 +109,22 @@ def swap(model_path,
                 swapped_output = _get_pred_label(swapped_output)
                 visualization.visualize(swapped_output, title=code)
 
-        if save_images:
-            # save every single images
-            for gt, output, swapped_output, code in zip(labeled_shape, outputs, swapped_outputs, hash_code):
-                output = tf.squeeze(tf.where(output > 0.5, 1., 0.))
-                output = _get_pred_label(output)
-                swapped_output = tf.squeeze(tf.where(swapped_output > 0.5, 1., 0.))
-                swapped_output = _get_pred_label(swapped_output)
-                visualization.save_visualized_img(gt, os.path.join(saved_dir, f'{count}_{code}_gt.png'))
-                visualization.save_visualized_img(output, os.path.join(saved_dir, f'{count}_{code}_recon.png'))
-                visualization.save_visualized_img(swapped_output, os.path.join(saved_dir, f'{count}_{code}_swap_part{int(which)}.png'))
+        # save every single images
+        for gt, output, swapped_output, code in zip(labeled_shape, outputs, swapped_outputs, hash_code):
+            output = tf.squeeze(tf.where(output > 0.5, 1., 0.))
+            output = _get_pred_label(output)
+            swapped_output = tf.squeeze(tf.where(swapped_output > 0.5, 1., 0.))
+            swapped_output = _get_pred_label(swapped_output)
+            visualization.save_visualized_img(gt, os.path.join(saved_dir, f'{count}_{code}_gt.png'))
+            visualization.save_visualized_img(output, os.path.join(saved_dir, f'{count}_{code}_recon.png'))
+            visualization.save_visualized_img(swapped_output, os.path.join(saved_dir, f'{count}_{code}_swap_part{int(which)}.png'))
 
-    if save_images:
-        print('Stacking all images together, please wait...')
-        # save stacked images for paper
-        if len(os.listdir(saved_dir)) != 12:
-            warnings.warn(f'stacked images will not be saved, because there are not exact 12 images in {saved_dir}')
-        else:
-            stack_plot.stack_swapped_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
+    print('Stacking all images together, please wait...')
+    # save stacked images for paper
+    if len(os.listdir(saved_dir)) != 12:
+        warnings.warn(f'stacked images will not be saved, because there are not exact 12 images in {saved_dir}')
+    else:
+        stack_plot.stack_swapped_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
 
 
 def swap_latent(my_model, unlabeled_shape, which_part):
@@ -156,7 +153,6 @@ if __name__ == '__main__':
     parser.add_argument('-s2', '--shape2', nargs='+', help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
-    parser.add_argument('--save_img', default=True, help='save all generated images')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
     parser.add_argument('--W_crop_factor', default=0.55, help='Percentage to crop empty spcae of every single image in W direction. Only valid when save_img is True')
     parser.add_argument('--H_shift', default=15, help='How many pixels to be shifted for the cropping of every single image in H direction. Only valid when save_img is True')
@@ -174,7 +170,6 @@ if __name__ == '__main__':
          shape2=args.shape2,
          category=args.category,
          visualize=args.visualize,
-         save_images=bool(args.save_img),
          H_crop_factor=float(args.H_crop_factor),
          W_crop_factor=float(args.W_crop_factor),
          H_shift=int(args.H_shift),
