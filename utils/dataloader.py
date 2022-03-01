@@ -3,8 +3,7 @@ import numpy as np
 import tensorflow as tf
 import math
 import scipy.io
-from tensorflow.keras.utils import Sequence
-from tqdm import tqdm
+from tensorflow.keras.utils import Sequence, Progbar
 
 CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649'}
 URL_MAP = {'chair': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03001627.zip?inline=false',
@@ -23,8 +22,9 @@ def get_dataset(category='chair', batch_size=32, split_ratio=0.8, max_num_parts=
     all_voxel_grid = list()
     all_part = list()
     all_trans = list()
-    print('Loading data to RAM. Please wait...')
-    for v_fp, p_fp, t_fp in tqdm(zip(voxel_grid_fp, part_fp, trans_fp), total=len(voxel_grid_fp)):
+    pb = Progbar(len(voxel_grid_fp))
+    print('Loading data, please wait...')
+    for count, (v_fp, p_fp, t_fp) in enumerate(zip(voxel_grid_fp, part_fp, trans_fp)):
         v = scipy.io.loadmat(v_fp)['data'][:, :, :, np.newaxis]
         all_voxel_grid.append(v)
 
@@ -44,6 +44,8 @@ def get_dataset(category='chair', batch_size=32, split_ratio=0.8, max_num_parts=
                 transformations.append(scipy.io.loadmat(os.path.join(dir_name, f'part{i}_trans_matrix.mat'))['data'][:3])
         all_part.append(parts)
         all_trans.append(transformations)
+        pb.update(count+1)
+    print(f'Total Samples: {len(voxel_grid_fp)} - Training Samples: {num_training_samples} - Test Samples: {len(voxel_grid_fp)-num_training_samples}')
 
     training_set = Dataset(all_voxel_grid[:num_training_samples], all_part[:num_training_samples],
                            all_trans[:num_training_samples], batch_size)

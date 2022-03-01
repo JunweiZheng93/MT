@@ -123,7 +123,7 @@ def interpolation(model_path,
         else:
             visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'shape_{count}_{shape1}.png'))
             visualization.save_visualized_img(part_output, os.path.join(saved_dir, f'part{which_part}_{count}_{shape1}.png'))
-        pb.update(current=count+1)
+        pb.update(count+1)
 
     print('Stacking all images together, please wait...')
     stack_plot.stack_interpolation_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)

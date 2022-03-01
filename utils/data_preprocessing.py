@@ -6,7 +6,7 @@ import argparse
 from utils import binvox_rw
 from utils import visualization
 from scipy import ndimage
-from tqdm import tqdm
+from tensorflow.keras.utils import Progbar
 
 
 def get_reference_label(pcd_fp, label_fp, resolution=32):
@@ -169,7 +169,8 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
     output_fp = os.path.join(output_fp, category_name)
 
     shape_names = [os.path.splitext(each)[0] for each in os.listdir(os.path.join(pcd_fp, 'points'))]
-    for shape_name in tqdm(shape_names):
+    pb = Progbar(len(shape_names))
+    for count, shape_name in enumerate(shape_names):
         shape_dir = os.path.join(output_fp, shape_name)
         if not os.path.exists(shape_dir):
             os.makedirs(shape_dir)
@@ -193,6 +194,7 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
             scipy.io.savemat(os.path.join(shape_dir, f'part{which}.mat'), {'data': part})
             scipy.io.savemat(os.path.join(shape_dir, f'part{which}_trans_matrix.mat'), {'data': trans})
             visualization.save_visualized_img(part, save_dir=os.path.join(shape_dir, f'part{which}.png'))
+        pb.update(count+1)
 
 
 if __name__ == '__main__':
