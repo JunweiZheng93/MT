@@ -1,6 +1,9 @@
 import math
 import numpy as np
 import os
+import sys
+PROJ_ROOT = os.path.abspath(__file__)[:-28]
+sys.path.append(PROJ_ROOT)
 import scipy.io
 import argparse
 from utils import binvox_rw
