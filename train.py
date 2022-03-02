@@ -14,7 +14,8 @@ def train_model(category='chair',
                 batch_size=32,
                 split_ratio=0.8,
                 max_num_parts=4,
-                bce_weight=0.8,
+                bce_weight=0.6,
+                bce_weight_shape=0.6,
                 optimizer='adam',
                 lr=0.001,
                 decay_rate=0.8,
@@ -42,7 +43,7 @@ def train_model(category='chair',
     # get dataset
     training_set, test_set = dataloader.get_dataset(category=category, batch_size=batch_size, split_ratio=split_ratio, max_num_parts=max_num_parts)
     # create model
-    my_model = model.Model(max_num_parts, bce_weight, training_process, use_attention, keep_channel, use_ac_loss, which_layer, num_blocks, num_heads, d_model)
+    my_model = model.Model(max_num_parts, bce_weight, bce_weight_shape, training_process, use_attention, keep_channel, use_ac_loss, which_layer, num_blocks, num_heads, d_model)
 
     if training_process == 1 or training_process == '1':
         _execute_training_process(my_model, training_set, test_set, epochs, shuffle, 1, use_attention, use_ac_loss, optimizer, lr, decay_rate, decay_step_size, RESULT_PATH)
@@ -181,6 +182,7 @@ if __name__ == '__main__':
                 split_ratio=hparam['split_ratio'],
                 max_num_parts=hparam['max_num_parts'],
                 bce_weight=hparam['bce_weight'],
+                bce_weight_shape=hparam['bce_weight_shape'],
                 optimizer=hparam['optimizer'],
                 lr=hparam['lr'],
                 decay_rate=hparam['decay_rate'],

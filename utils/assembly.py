@@ -48,8 +48,8 @@ def assembly(model_path,
 
     # load weights and warm up model
     warm_up_data = tf.ones((1, H, W, D, C), dtype=tf.float32)
-    my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['bce_weight'], 3,
-                           hparam.hparam['use_attention'], hparam.hparam['keep_channel'],
+    my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['bce_weight'], hparam.hparam['bce_weight_shape'],
+                           3, hparam.hparam['use_attention'], hparam.hparam['keep_channel'],
                            hparam.hparam['use_ac_loss'], hparam.hparam['which_layer'], hparam.hparam['num_blocks'],
                            hparam.hparam['num_heads'], hparam.hparam['d_model'])
     my_model(warm_up_data)

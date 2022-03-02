@@ -501,10 +501,11 @@ class AttentionLayer(keras.layers.Layer):
 
 class Model(keras.Model):
 
-    def __init__(self, num_parts, bce_weight, training_process, use_attention, keep_channel, use_ac_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
+    def __init__(self, num_parts, bce_weight, bce_weight_shape, training_process, use_attention, keep_channel, use_ac_loss, which_layer, num_blocks, num_heads, d_model, **kwargs):
         super(Model, self).__init__(**kwargs)
         self.num_parts = num_parts
         self.bce_weight = bce_weight
+        self.bce_weight_shape = bce_weight_shape
         self.training_process = training_process
         self.use_attention = use_attention
         self.keep_channel = keep_channel
@@ -849,9 +850,14 @@ class Model(keras.Model):
         bce = 2 * tf.reduce_sum(-self.bce_weight * gt * tf.math.log(pred + 1e-7) - (1 - self.bce_weight) * (1 - gt) * tf.math.log(1 - pred + 1e-7), axis=(1, 2, 3, 4, 5))
         return tf.reduce_mean(bce)
 
-    @staticmethod
-    def _cal_shape_reconstruction_loss(gt, pred):
-        return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3)))
+    # @staticmethod
+    # def _cal_shape_reconstruction_loss(gt, pred):
+    #     return tf.reduce_mean(tf.reduce_sum(tf.keras.losses.binary_crossentropy(gt, pred), axis=(1, 2, 3)))
+
+    def _cal_shape_reconstruction_loss(self, gt, pred):
+        pred = tf.clip_by_value(pred, 1e-7, 1.-1e-7)
+        bce = 2 * tf.reduce_sum(-self.bce_weight_shape * gt * tf.math.log(pred + 1e-7) - (1 - self.bce_weight_shape) * (1 - gt) * tf.math.log(1 - pred + 1e-7), axis=(1, 2, 3, 4))
+        return tf.reduce_mean(bce)
 
     @staticmethod
     def _cal_transformation_loss(gt, pred):
