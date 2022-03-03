@@ -4,6 +4,7 @@ import os
 import argparse
 from utils import dataloader
 import pymorton as pm
+from tensorflow.keras.utils import Progbar
 
 
 PROJ_ROOT = os.path.abspath(__file__)[:-16]
@@ -54,6 +55,7 @@ def evaluate_model(model_path,
     neighbour = tf.concat([neighbour[:13], neighbour[14:]], axis=0)
     connected_shapes = 0
 
+    pb = Progbar(len(test_set))
     print('Your model is being evaluated, please wait...')
 
     if hparam.hparam['training_process'] == 1 or hparam.hparam['training_process'] == '1':
@@ -72,7 +74,7 @@ def evaluate_model(model_path,
             print(f'Part{i+1}_Symmetry_Score: {part_symmetry_score_tracker_list[i].result()}')
 
     elif hparam.hparam['training_process'] == 2 or hparam.hparam['training_process'] == '2':
-        for x, labels, trans in test_set:
+        for i, (x, labels, trans) in enumerate(test_set):
             theta = my_model(x, training=False)
             trans_mse = my_model._cal_transformation_loss(trans, theta) * 2 / my_model.num_parts
             transformation_mse_tracker.update_state(trans_mse)
@@ -81,13 +83,14 @@ def evaluate_model(model_path,
             shape_mIoU_tracker.update_state(x, shapes)
             shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
             connected_shapes += cal_connectivity_score(shapes, neighbour)
+            pb.update(i+1)
         print(f'Transformation_MSE: {transformation_mse_tracker.result()}')
         print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
         print(f'Shape_Symmetry_Score: {shape_symmetry_score_tracker.result()}')
         print(f'Shape_Connectivity_Score: {connected_shapes/len(test_set.all_voxel_grid)}')
 
     else:
-        for x, labels, trans in test_set:
+        for i, (x, labels, trans) in enumerate(test_set):
             shapes = my_model(x, training=False)
             trans_mse = my_model._cal_transformation_loss(trans, my_model.theta) * 2 / my_model.num_parts
             transformation_mse_tracker.update_state(trans_mse)
@@ -101,6 +104,7 @@ def evaluate_model(model_path,
             shape_mIoU_tracker.update_state(x, shapes)
             shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
             connected_shapes += cal_connectivity_score(shapes, neighbour)
+            pb.update(i+1)
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
         print(f'Part_mIoU: {all_part_mIoU_tracker.result()}')
