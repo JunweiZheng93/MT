@@ -3,6 +3,7 @@ import importlib
 import os
 import argparse
 from utils import dataloader
+import pymorton as pm
 
 
 PROJ_ROOT = os.path.abspath(__file__)[:-16]
@@ -44,6 +45,15 @@ def evaluate_model(model_path,
     part_symmetry_score_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
     shape_symmetry_score_tracker = tf.keras.metrics.MeanIoU(2)
 
+    shift = [-1, 0, 1]
+    x, y, z = tf.meshgrid(shift, shift, shift)
+    x = tf.reshape(x, [-1])
+    y = tf.reshape(y, [-1])
+    z = tf.reshape(z, [-1])
+    neighbour = tf.stack([x, y, z], axis=1)
+    neighbour = tf.concat([neighbour[:13], neighbour[14:]], axis=0)
+    connected_shapes = 0
+
     print('Your model is being evaluated, please wait...')
 
     if hparam.hparam['training_process'] == 1 or hparam.hparam['training_process'] == '1':
@@ -70,9 +80,11 @@ def evaluate_model(model_path,
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             shape_mIoU_tracker.update_state(x, shapes)
             shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
+            connected_shapes += cal_connectivity_score(shapes, neighbour)
         print(f'Transformation_MSE: {transformation_mse_tracker.result()}')
         print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
         print(f'Shape_Symmetry_Score: {shape_symmetry_score_tracker.result()}')
+        print(f'Shape_Connectivity_Score: {connected_shapes/len(test_set.all_voxel_grid)}')
 
     else:
         for x, labels, trans in test_set:
@@ -88,6 +100,7 @@ def evaluate_model(model_path,
                 part_symmetry_score_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
             shape_mIoU_tracker.update_state(x, shapes)
             shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
+            connected_shapes += cal_connectivity_score(shapes, neighbour)
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
         print(f'Part_mIoU: {all_part_mIoU_tracker.result()}')
@@ -96,6 +109,7 @@ def evaluate_model(model_path,
         print(f'Transformation_MSE: {transformation_mse_tracker.result()}')
         print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
         print(f'Shape_Symmetry_Score: {shape_symmetry_score_tracker.result()}')
+        print(f'Shape_Connectivity_Score: {connected_shapes/len(test_set.all_voxel_grid)}')
 
 
 def configure_gpu(which_gpu):
@@ -104,6 +118,25 @@ def configure_gpu(which_gpu):
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
             tf.config.experimental.set_visible_devices(gpus[which_gpu], "GPU")
+
+
+def cal_connectivity_score(inputs, neighbour):
+    connected_shape = 0
+    for each_input in inputs:
+        reference = tf.cast(tf.where(tf.squeeze(each_input)), dtype=tf.int32)
+        if len(reference) == 0: continue
+        reference_list = [pm.interleave3(*each) for each in reference.numpy().tolist()]
+        reference_set = set(reference_list)
+        isolated_point = 0
+        for each_voxel in reference:
+            query = neighbour + each_voxel
+            query_list = [pm.interleave3(*each) for each in query.numpy().tolist()]
+            query_set = set(query_list)
+            if not query_set.intersection(reference_set):
+                isolated_point += 1
+                break
+        if not isolated_point: connected_shape += 1
+    return connected_shape
 
 
 def flip(input_fmap):
