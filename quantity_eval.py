@@ -43,8 +43,10 @@ def evaluate_model(model_path,
     part_mIoU_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
     all_part_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
     shape_mIoU_tracker = tf.keras.metrics.MeanIoU(2)
-    part_symmetry_score_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
-    shape_symmetry_score_tracker = tf.keras.metrics.MeanIoU(2)
+    # part_symmetry_score_tracker_list = [tf.keras.metrics.MeanIoU(2) for i in range(my_model.num_parts)]
+    # shape_symmetry_score_tracker = tf.keras.metrics.MeanIoU(2)
+    part_symmetry_score_tracker_list = [tf.keras.metrics.Mean() for i in range(my_model.num_parts)]
+    shape_symmetry_score_tracker = tf.keras.metrics.Mean()
 
     shift = [-1, 0, 1]
     x, y, z = tf.meshgrid(shift, shift, shift)
@@ -63,10 +65,11 @@ def evaluate_model(model_path,
             parts = my_model(x, training=False)
             parts = tf.transpose(tf.where(parts > 0.5, 1., 0.), (1, 0, 2, 3, 4, 5))
             labels = tf.transpose(labels, (1, 0, 2, 3, 4, 5))
-            for gt, part, part_mIoU_tracker, part_symmetry_tracker in zip(labels, parts, part_mIoU_tracker_list, part_symmetry_score_tracker_list):
+            for gt, part, part_mIoU_tracker, part_symmetry_score_tracker in zip(labels, parts, part_mIoU_tracker_list, part_symmetry_score_tracker_list):
                 part_mIoU_tracker.update_state(gt, part)
                 all_part_mIoU_tracker.update_state(gt, part)
-                part_symmetry_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
+                # part_symmetry_score_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
+                part_symmetry_score_tracker.update_state(cal_symmetry_score(part, H, W, D, C))
         for i in range(my_model.num_parts):
             print(f'Part{i+1}_mIoU: {part_mIoU_tracker_list[i].result()}')
         print(f'Part_mIoU: {all_part_mIoU_tracker.result()}')
@@ -81,7 +84,8 @@ def evaluate_model(model_path,
             shapes = model.Resampling()((my_model.stacked_decoded_parts, theta))
             shapes = tf.where(tf.reduce_max(shapes, axis=1) > 0.5, 1., 0.)
             shape_mIoU_tracker.update_state(x, shapes)
-            shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
+            # shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
+            shape_symmetry_score_tracker.update_state(cal_symmetry_score(shapes, H, W, D, C))
             connected_shapes += cal_connectivity_score(shapes, neighbour)
             pb.update(i+1)
         print(f'Transformation_MSE: {transformation_mse_tracker.result()}')
@@ -100,9 +104,11 @@ def evaluate_model(model_path,
             for gt, part, part_mIoU_tracker, part_symmetry_score_tracker in zip(labels, parts, part_mIoU_tracker_list, part_symmetry_score_tracker_list):
                 part_mIoU_tracker.update_state(gt, part)
                 all_part_mIoU_tracker.update_state(gt, part)
-                part_symmetry_score_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
+                # part_symmetry_score_tracker.update_state(part[:, :, :, int(D/2):, :], flip(part[:, :, :, :int(D/2), :]))
+                part_symmetry_score_tracker.update_state(cal_symmetry_score(part, H, W, D, C))
             shape_mIoU_tracker.update_state(x, shapes)
-            shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
+            # shape_symmetry_score_tracker.update_state(shapes[:, :, :, int(D/2):, :], flip(shapes[:, :, :, :int(D/2), :]))
+            shape_symmetry_score_tracker.update_state(cal_symmetry_score(shapes, H, W, D, C))
             connected_shapes += cal_connectivity_score(shapes, neighbour)
             pb.update(i+1)
         for i in range(my_model.num_parts):
@@ -124,7 +130,7 @@ def configure_gpu(which_gpu):
             tf.config.experimental.set_visible_devices(gpus[which_gpu], "GPU")
 
 
-def cal_connectivity_score(inputs, neighbour):
+def cal_connectivity_score(inputs, neighbour, tolerance=0.001):
     connected_shape = 0
     for each_input in inputs:
         reference = tf.cast(tf.where(tf.squeeze(each_input)), dtype=tf.int32)
@@ -138,9 +144,17 @@ def cal_connectivity_score(inputs, neighbour):
             query_set = set(query_list)
             if not query_set.intersection(reference_set):
                 isolated_point += 1
-                break
-        if not isolated_point: connected_shape += 1
+                if isolated_point > tolerance * len(reference_set): break
+        if isolated_point <= tolerance * len(reference): connected_shape += 1
     return connected_shape
+
+
+def cal_symmetry_score(inputs, H=32, W=32, D=32, C=1):
+    left = inputs[:, :, :, :int(D/2), :]
+    right = inputs[:, :, :, int(D/2):, :]
+    matched_voxel = tf.where(tf.math.logical_xor(tf.cast(flip(left), dtype=tf.bool), tf.cast(right, dtype=tf.bool)), 0., 1.)
+    symmetry_score = tf.reduce_mean(tf.reduce_sum(matched_voxel, axis=(1, 2, 3, 4)) / (H * W * D/2 * C))
+    return symmetry_score
 
 
 def flip(input_fmap):
