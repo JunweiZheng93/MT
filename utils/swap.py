@@ -11,17 +11,18 @@ import numpy as np
 from copy import deepcopy
 from utils import visualization
 import argparse
-import warnings
 from utils import stack_plot
 from tensorflow.keras.utils import Progbar
+from multiprocessing import Process
+import multiprocessing as mp
 
 
-def swap(model_path,
-         which_part,
-         shape1,
-         shape2,
+def swap(ori_model_path,
+         attention_model_path,
+         which_part=(1, 3),
+         shape1=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48'],
+         shape2=['9d7d7607e1ba099bd98e59dfd5823115', '54e2aa868107826f3dbc2ce6b9d89f11'],
          category='chair',
-         visualize=False,
          H_crop_factor=0.2,
          W_crop_factor=0.55,
          H_shift=15,
@@ -32,54 +33,19 @@ def swap(model_path,
          C=1,
          which_gpu=0):
 
-    def _get_pred_label(pred):
-        code = 0
-        for idx, each_part in enumerate(pred):
-            code += each_part * 2 ** (idx + 1)
-        pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
-        pred_label = pred_label.numpy().astype('uint8')
-        return pred_label
-
     # disable warning and info message, only enable error message
     tf.get_logger().setLevel('ERROR')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     configure_gpu(which_gpu)
 
-    model = importlib.import_module(f"results.{model_path.split('/')[-3]}.model")
-    hparam = importlib.import_module(f"results.{model_path.split('/')[-3]}.hparam")
-
-    # load weights and warm up model
-    warm_up_data = tf.ones((1, H, W, D, C), dtype=tf.float32)
-    my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['bce_weight'], hparam.hparam['bce_weight_shape'],
-                           3, hparam.hparam['use_attention'], hparam.hparam['keep_channel'],
-                           hparam.hparam['use_ac_loss'], hparam.hparam['which_layer'], hparam.hparam['num_blocks'],
-                           hparam.hparam['num_heads'], hparam.hparam['d_model'])
-    my_model(warm_up_data)
-    my_model.load_weights(model_path, by_name=True)
-
     # get hash code of the shapes
     hash_codes = list()
     for first, second in zip(shape1, shape2):
         hash_codes.append((first, second))
 
-    # get unlabeled shapes and labeled shapes
-    unlabeled_shape_list = list()
-    labeled_shape_list = list()
-    for code1, code2 in hash_codes:
-        unlabeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code1, 'object_unlabeled.mat')
-        unlabeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code2, 'object_unlabeled.mat')
-        labeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code1, 'object_labeled.mat')
-        labeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code2, 'object_labeled.mat')
-        unlabeled_shape1 = scipy.io.loadmat(unlabeled_path1)['data'][..., np.newaxis]
-        unlabeled_shape2 = scipy.io.loadmat(unlabeled_path2)['data'][..., np.newaxis]
-        labeled_shape1 = scipy.io.loadmat(labeled_path1)['data']
-        labeled_shape2 = scipy.io.loadmat(labeled_path2)['data']
-        unlabeled_shape_list.append(tf.cast(tf.stack((unlabeled_shape1, unlabeled_shape2), axis=0), dtype=tf.float32))
-        labeled_shape_list.append([labeled_shape1, labeled_shape2])
-
-    base_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'swap')
-    saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'swap')
+    base_dir = os.path.join(PROJ_ROOT, 'results', 'swap')
+    saved_dir = os.path.join(PROJ_ROOT, 'results', 'swap')
     count = 0
     while True:
         if os.path.exists(saved_dir):
@@ -90,51 +56,66 @@ def swap(model_path,
             os.makedirs(saved_dir)
             break
 
-    pb = Progbar(len(labeled_shape_list))
-    print('Saving swapped images, please wait...')
-    for count, (unlabeled_shape, labeled_shape, hash_code, which) in enumerate(zip(unlabeled_shape_list, labeled_shape_list, hash_codes, which_part)):
-        latent, swapped_latent = swap_latent(my_model, unlabeled_shape, int(which))
+    # get unlabeled shapes and labeled shapes
+    unlabeled_shape_list = list()
+    labeled_shape_list = list()
+    pb = Progbar(len(hash_codes))
+    print('Saving gt, please wait...')
+    for count, (code1, code2) in enumerate(hash_codes):
+        unlabeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code1, 'object_unlabeled.mat')
+        unlabeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code2, 'object_unlabeled.mat')
+        labeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code1, 'object_labeled.mat')
+        labeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code2, 'object_labeled.mat')
+        unlabeled_shape1 = scipy.io.loadmat(unlabeled_path1)['data'][..., np.newaxis]
+        unlabeled_shape2 = scipy.io.loadmat(unlabeled_path2)['data'][..., np.newaxis]
+        labeled_shape1 = scipy.io.loadmat(labeled_path1)['data']
+        labeled_shape2 = scipy.io.loadmat(labeled_path2)['data']
+        visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'{count}0_{code1}_gt.png'))
+        visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'{count}1_{code2}_gt.png'))
+        unlabeled_shape_list.append([unlabeled_shape1, unlabeled_shape2])
+        labeled_shape_list.append([labeled_shape1, labeled_shape2])
+        pb.update(count+1)
 
+    print('Saving swapped images, please wait...')
+    p1 = Process(target=save_swap_images, args=(ori_model_path, unlabeled_shape_list, hash_codes, which_part, H, W, D, C, saved_dir, 'ori'))
+    p2 = Process(target=save_swap_images, args=(attention_model_path, unlabeled_shape_list, hash_codes, which_part, H, W, D, C, saved_dir, 'attention'))
+    mp.set_start_method('spawn')
+    p1.start()
+    p2.start()
+    p1.join()
+    p2.join()
+
+    print('Stacking all images together, please wait...')
+    stack_plot.stack_swapped_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
+    print(f'Done! All images are saved in {saved_dir}')
+
+
+def save_swap_images(path, unlabeled_shape_list, hash_codes, which_part, H, W, D, C, save_dir, prefix):
+
+    # load weights and warm up model
+    model = importlib.import_module(f"results.{path.split('/')[-3]}.model")
+    hparam = importlib.import_module(f"results.{path.split('/')[-3]}.hparam")
+    warm_up_data = tf.ones((1, H, W, D, C), dtype=tf.float32)
+    my_model = model.Model(hparam.hparam['max_num_parts'], hparam.hparam['bce_weight'],
+                           hparam.hparam['bce_weight_shape'],
+                           3, hparam.hparam['use_attention'], hparam.hparam['keep_channel'],
+                           hparam.hparam['use_ac_loss'], hparam.hparam['which_layer'], hparam.hparam['num_blocks'],
+                           hparam.hparam['num_heads'], hparam.hparam['d_model'])
+    my_model(warm_up_data)
+    my_model.load_weights(path, by_name=True)
+
+    for count, (unlabeled_shape, hash_code, which) in enumerate(zip(unlabeled_shape_list, hash_codes, which_part)):
+        unlabeled_shape = tf.cast(tf.stack(unlabeled_shape, axis=0), dtype=tf.float32)
+        latent, swapped_latent = swap_latent(my_model, unlabeled_shape, int(which))
         # get reconstruction and swapped reconstruction
         fake_input = 0
         outputs = my_model(fake_input, training=False, decomposer_output=latent)
         swapped_outputs = my_model(fake_input, training=False, decomposer_output=swapped_latent)
-
-        if visualize:
-            # visualize gt
-            for gt, code in zip(labeled_shape, hash_code):
-                visualization.visualize(gt, title=code)
-
-            # visualize reconstruction
-            for output, code in zip(outputs, hash_code):
-                output = tf.squeeze(tf.where(output > 0.5, 1., 0.))
-                output = _get_pred_label(output)
-                visualization.visualize(output, title=code)
-
-            # visualize swapped reconstruction
-            for swapped_output, code in zip(swapped_outputs, hash_code):
-                swapped_output = tf.squeeze(tf.where(swapped_output > 0.5, 1., 0.))
-                swapped_output = _get_pred_label(swapped_output)
-                visualization.visualize(swapped_output, title=code)
-
-        # save every single images
-        for i, (gt, output, swapped_output, code) in enumerate(zip(labeled_shape, outputs, swapped_outputs, hash_code)):
-            output = tf.squeeze(tf.where(output > 0.5, 1., 0.))
-            output = _get_pred_label(output)
-            swapped_output = tf.squeeze(tf.where(swapped_output > 0.5, 1., 0.))
-            swapped_output = _get_pred_label(swapped_output)
-            visualization.save_visualized_img(gt, os.path.join(saved_dir, f'{count}{i}_{code}_gt.png'))
-            visualization.save_visualized_img(output, os.path.join(saved_dir, f'{count}{i}_{code}_recon.png'))
-            visualization.save_visualized_img(swapped_output, os.path.join(saved_dir, f'{count}{i}_{code}_swap_part{int(which)}.png'))
-        pb.update(count+1)
-
-    print('Stacking all images together, please wait...')
-    # save stacked images for paper
-    if len(os.listdir(saved_dir)) != 12:
-        warnings.warn(f'stacked images will not be saved, because there are not exact 12 images in {saved_dir}')
-    else:
-        stack_plot.stack_swapped_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
-        print(f'Done! All images are saved in {saved_dir}')
+        for i, (output, swapped_output) in enumerate(zip(outputs, swapped_outputs)):
+            output = get_pred_label(tf.squeeze(tf.where(output > 0.5, 1., 0.)))
+            swapped_output = get_pred_label(tf.squeeze(tf.where(swapped_output > 0.5, 1., 0.)))
+            visualization.save_visualized_img(output, os.path.join(save_dir, f'{prefix}_recon_{count}{i}_{hash_code[i]}.png'))
+            visualization.save_visualized_img(swapped_output, os.path.join(save_dir, f'{prefix}_swap{int(which)}_{count}{i}_{hash_code[i]}.png'))
 
 
 def swap_latent(my_model, unlabeled_shape, which_part):
@@ -153,18 +134,27 @@ def swap_latent(my_model, unlabeled_shape, which_part):
     return latent, swapped_latent
 
 
+def get_pred_label(pred):
+    code = 0
+    for idx, each_part in enumerate(pred):
+        code += each_part * 2 ** (idx + 1)
+    pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
+    pred_label = pred_label.numpy().astype('uint8')
+    return pred_label
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('model_path', help='path of the model')
+    parser.add_argument('--ori_model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304165205', 'process_3', 'checkpoint.h5'), help='path of the ori model')
+    parser.add_argument('--attention_model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'), help='path of the attention model')
     parser.add_argument('-w', '--which_part', default=[1, 3], nargs='+', help='which part to be swapped')
     parser.add_argument('-s1', '--shape1', default=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48'], nargs='+', help='hash code of the first full shape.')
     parser.add_argument('-s2', '--shape2', default=['9d7d7607e1ba099bd98e59dfd5823115', '54e2aa868107826f3dbc2ce6b9d89f11'], nargs='+', help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
-    parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
-    parser.add_argument('--W_crop_factor', default=0.55, help='Percentage to crop empty spcae of every single image in W direction. Only valid when save_img is True')
+    parser.add_argument('--W_crop_factor', default=0.5, help='Percentage to crop empty spcae of every single image in W direction. Only valid when save_img is True')
     parser.add_argument('--H_shift', default=15, help='How many pixels to be shifted for the cropping of every single image in H direction. Only valid when save_img is True')
     parser.add_argument('--W_shift', default=40, help='How many pixels to be shifted for the cropping of every single image in W direction. Only valid when save_img is True')
     parser.add_argument('-H', default=32, help='height of the shape voxel grid. Default is 32')
@@ -174,12 +164,12 @@ if __name__ == '__main__':
     parser.add_argument('-gpu', default=0, help='use which gpu. Default is 0')
     args = parser.parse_args()
 
-    swap(model_path=args.model_path,
+    swap(ori_model_path=args.ori_model_path,
+         attention_model_path=args.attention_model_path,
          which_part=args.which_part,
          shape1=args.shape1,
          shape2=args.shape2,
          category=args.category,
-         visualize=args.visualize,
          H_crop_factor=float(args.H_crop_factor),
          W_crop_factor=float(args.W_crop_factor),
          H_shift=int(args.H_shift),

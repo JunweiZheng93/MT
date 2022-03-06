@@ -132,8 +132,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('model_path', help='path of the model')
-    parser.add_argument('-s', '--shape', nargs='+', help='hash code of the shapes to be assembled.', default=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48', 'cd9702520ad57689bbc7a6acbd8f058b', '5042005e178d164481d0f12b8bf5c990'])
+    parser.add_argument('--model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'), help='path of the model')
+    parser.add_argument('-s', '--shape', nargs='+', help='hash code of the shapes to be assembled.', default=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48', 'cd9702520ad57689bbc7a6acbd8f058b',
+                                                                                                              '5042005e178d164481d0f12b8bf5c990', '88aec853dcb10d526efa145e9f4a2693', 'a5a5d118118eb760fee31d33418a3c16'])
     parser.add_argument('--seed', default=6, help='seed for the random mixed order. Default is 6')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')

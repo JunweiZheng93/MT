@@ -40,7 +40,7 @@ def get_cmap(num_points, cmap):
     return new_cmap
 
 
-def save_visualized_img(x, save_dir, max_num_parts=8, cmap='Set2', show_axis=False, show_grid=False):
+def save_visualized_img(x, save_dir, max_num_parts=8, cmap='Set2', show_axis=False, show_grid=False, is_unlabeled_gt=False):
     """
     :param x: ndarray. input data to be visualized.
     :param save_dir: path to save the visualized image.
@@ -56,7 +56,10 @@ def save_visualized_img(x, save_dir, max_num_parts=8, cmap='Set2', show_axis=Fal
     ax = fig.add_axes([0, 0, 1, 1], projection='3d')
     new_cmap = get_cmap(max_num_parts, cmap)
     label_color = np.take(new_cmap, x, axis=0)
-    ax.voxels(x, facecolors=label_color)
+    if is_unlabeled_gt:
+        ax.voxels(x, facecolors='lightgray')
+    else:
+        ax.voxels(x, facecolors=label_color)
     if not show_axis:
         plt.axis('off')
     if not show_grid:

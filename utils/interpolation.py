@@ -15,7 +15,6 @@ from tensorflow.keras.utils import Progbar
 
 
 def interpolation(model_path,
-                  which_part,
                   shape1,
                   shape2,
                   category='chair',
@@ -56,16 +55,25 @@ def interpolation(model_path,
     my_model(warm_up_data)
     my_model.load_weights(model_path, by_name=True)
 
+    # get hash code of the shapes
+    hash_codes = list()
+    for first, second in zip(shape1, shape2):
+        hash_codes.append((first, second))
+
     # get unlabeled shapes and labeled shapes
-    unlabeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], shape1, 'object_unlabeled.mat')
-    unlabeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], shape2, 'object_unlabeled.mat')
-    labeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], shape1, 'object_labeled.mat')
-    labeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], shape2, 'object_labeled.mat')
-    unlabeled_shape1 = scipy.io.loadmat(unlabeled_path1)['data'][..., np.newaxis]
-    unlabeled_shape2 = scipy.io.loadmat(unlabeled_path2)['data'][..., np.newaxis]
-    labeled_shape1 = scipy.io.loadmat(labeled_path1)['data']
-    labeled_shape2 = scipy.io.loadmat(labeled_path2)['data']
-    unlabeled_shape = tf.cast(tf.stack((unlabeled_shape1, unlabeled_shape2), axis=0), dtype=tf.float32)
+    unlabeled_shape_list = list()
+    labeled_shape_list = list()
+    for code1, code2 in hash_codes:
+        unlabeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code1, 'object_unlabeled.mat')
+        unlabeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code2, 'object_unlabeled.mat')
+        labeled_path1 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code1, 'object_labeled.mat')
+        labeled_path2 = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code2, 'object_labeled.mat')
+        unlabeled_shape1 = scipy.io.loadmat(unlabeled_path1)['data'][..., np.newaxis]
+        unlabeled_shape2 = scipy.io.loadmat(unlabeled_path2)['data'][..., np.newaxis]
+        labeled_shape1 = scipy.io.loadmat(labeled_path1)['data']
+        labeled_shape2 = scipy.io.loadmat(labeled_path2)['data']
+        unlabeled_shape_list.append(tf.cast(tf.stack((unlabeled_shape1, unlabeled_shape2), axis=0), dtype=tf.float32))
+        labeled_shape_list.append([labeled_shape1, labeled_shape2])
 
     base_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'interpolation')
     saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'interpolation')
@@ -79,50 +87,32 @@ def interpolation(model_path,
             os.makedirs(saved_dir)
             break
 
-    shape_latent, part_latent = interpolate_latent(my_model, unlabeled_shape, which_part)
+    pb = Progbar(len(labeled_shape_list))
+    print('Saving interpolated images, please wait...')
+    for count, (unlabeled_shape, labeled_shape, hash_code) in enumerate(zip(unlabeled_shape_list, labeled_shape_list, hash_codes)):
+        shape_latent = interpolate_latent(my_model, unlabeled_shape)
 
-    # get reconstruction and interpolation reconstruction
-    fake_input = 0
-    shape_outputs = my_model(fake_input, training=False, decomposer_output=shape_latent)
-    part_outputs = my_model(fake_input, training=False, decomposer_output=part_latent)
+        # get reconstruction and interpolation reconstruction
+        fake_input = 0
+        shape_outputs = my_model(fake_input, training=False, decomposer_output=shape_latent)
 
-    if visualize:
-        # visualize gt
-        visualization.visualize(labeled_shape1, title=shape1)
-        # visualize shape interpolation
-        for shape_output in shape_outputs:
+        if visualize:
+            # visualize gt
+            for gt, code in zip(labeled_shape, hash_code):
+                visualization.visualize(gt, title=code)
+            # visualize shape interpolation
+            for shape_output in shape_outputs:
+                shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
+                shape_output = _get_pred_label(shape_output)
+                visualization.visualize(shape_output, title=hash_code[0])
+
+        visualization.save_visualized_img(labeled_shape[0], os.path.join(saved_dir, f'gt_{count}_0_{hash_code[0]}.png'))
+        visualization.save_visualized_img(labeled_shape[1], os.path.join(saved_dir, f'gt_{count}_1_{hash_code[1]}.png'))
+
+        for i, shape_output in enumerate(shape_outputs):
             shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
             shape_output = _get_pred_label(shape_output)
-            visualization.visualize(shape_output, title=shape1)
-        visualization.visualize(labeled_shape2, title=shape2)
-
-        # visualize gt
-        visualization.visualize(labeled_shape1, title=shape1)
-        # visualize part interpolation
-        for part_output in part_outputs:
-            part_output = tf.squeeze(tf.where(part_output > 0.5, 1., 0.))
-            part_output = _get_pred_label(part_output)
-            visualization.visualize(part_output, title=shape1)
-        visualization.visualize(labeled_shape2, title=shape2)
-
-    print('Saving ground truth images, please wait...')
-    visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'gt_0_{shape1}.png'))
-    visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'gt_1_{shape2}.png'))
-
-    pb = Progbar(shape_outputs.shape[0])
-    print('Saving interpolated images, please wait...')
-    for count, (shape_output, part_output) in enumerate(zip(shape_outputs, part_outputs)):
-        shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
-        shape_output = _get_pred_label(shape_output)
-        part_output = tf.squeeze(tf.where(part_output > 0.5, 1., 0.))
-        part_output = _get_pred_label(part_output)
-        if count == 0:
-            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_0_{shape1}.png'))
-        elif count == 9:
-            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'recon_1_{shape2}.png'))
-        else:
-            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'shape_{count}_{shape1}.png'))
-            visualization.save_visualized_img(part_output, os.path.join(saved_dir, f'part{which_part}_{count}_{shape1}.png'))
+            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'interpolation_{count}_{i}_{hash_code[0]}.png'))
         pb.update(count+1)
 
     print('Stacking all images together, please wait...')
@@ -130,10 +120,9 @@ def interpolation(model_path,
     print(f'Done! All images are saved in {saved_dir}')
 
 
-def interpolate_latent(my_model, unlabeled_shape, which_part):
+def interpolate_latent(my_model, unlabeled_shape):
 
     full_shape_latent_list = list()
-    part_latent_list = list()
 
     # get latent representation
     latent = my_model.decomposer(unlabeled_shape, training=False)
@@ -145,29 +134,19 @@ def interpolate_latent(my_model, unlabeled_shape, which_part):
     latent_diff = latent_array2 - latent_array1
 
     # interpolate latent
-    mask = np.zeros_like(latent_array1)
-    mask[which_part-1] = 1.
-    for i in range(8):
-        full_shape_latent_list.append(latent_array1+(i+1)/9*latent_diff)
-        part_latent_list.append(latent_array1+(i+1)/9*latent_diff*mask)
-
-    full_shape_latent_list.insert(0, latent_array1)
-    full_shape_latent_list.append(latent_array2)
+    for i in range(10):
+        full_shape_latent_list.append(latent_array1 + i / 9 * latent_diff)
     full_shape_latent = tf.cast(tf.stack(full_shape_latent_list, axis=0), dtype=tf.float32)
-    part_latent_list.insert(0, latent_array1)
-    part_latent_list.append(latent_array2)
-    part_latent = tf.cast(tf.stack(part_latent_list, axis=0), dtype=tf.float32)
-    return full_shape_latent, part_latent
+    return full_shape_latent
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('model_path', help='path of the model')
-    parser.add_argument('-w', '--which_part', default=1, help='which part to be interpolated')
-    parser.add_argument('-s1', '--shape1', default='54e2aa868107826f3dbc2ce6b9d89f11', help='hash code of the first full shape.')
-    parser.add_argument('-s2', '--shape2', default='3c408a4ad6d57c3651bc6269fcd1b4c0', help='hash code of the second full shape.')
+    parser.add_argument('--model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'), help='path of the model')
+    parser.add_argument('-s1', '--shape1', nargs='+', default=['96929c12a4a6b15a492d9da2668ec34c', '2a56e3e2a6505ec492d9da2668ec34c'], help='hash code of the first full shape.')
+    parser.add_argument('-s2', '--shape2', nargs='+', default=['3c408a4ad6d57c3651bc6269fcd1b4c0', '88aec853dcb10d526efa145e9f4a2693'], help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
@@ -182,7 +161,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     interpolation(model_path=args.model_path,
-                  which_part=int(args.which_part),
                   shape1=args.shape1,
                   shape2=args.shape2,
                   category=args.category,
