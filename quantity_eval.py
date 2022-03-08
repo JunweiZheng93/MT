@@ -1,12 +1,15 @@
 import tensorflow as tf
 import importlib
 import os
+import sys
+PROJ_ROOT = os.path.abspath(__file__)[:-16]
+sys.path.append(PROJ_ROOT)
 import argparse
 from utils import dataloader
+from utils.pick import configure_gpu
 from tensorflow.keras.utils import Progbar
 
 
-PROJ_ROOT = os.path.abspath(__file__)[:-16]
 CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649'}
 
 
@@ -114,14 +117,6 @@ def evaluate_model(model_path,
         print(f'Shape_mIoU: {shape_mIoU_tracker.result()}')
         print(f'GT_Shape_Symmetry_Score: {gt_shape_symmetry_score_tracker.result()}')
         print(f'Shape_Symmetry_Score: {shape_symmetry_score_tracker.result()}')
-
-
-def configure_gpu(which_gpu):
-    gpus = tf.config.experimental.list_physical_devices("GPU")
-    if gpus:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-            tf.config.experimental.set_visible_devices(gpus[which_gpu], "GPU")
 
 
 def cal_symmetry_score(inputs):

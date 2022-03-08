@@ -3,11 +3,14 @@ import scipy.io
 import importlib
 import numpy as np
 import os
+import sys
+PROJ_ROOT = os.path.abspath(__file__)[:-15]
+sys.path.append(PROJ_ROOT)
 import argparse
 from utils import visualization
+from utils.pick import get_pred_label
 
 
-PROJ_ROOT = os.path.abspath(__file__)[:-15]
 CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649'}
 
 
@@ -70,8 +73,8 @@ def evaluate_model(model_path,
             # visualize predicted label
             shape_path = os.path.dirname(gt_label_path)
             gt_shape_path = os.path.join(shape_path, 'object_unlabeled.mat')
-            _visualize_pred_label(my_model, gt_shape_path, shape_code, visualize_decoded_part,
-                                  decoded_part_threshold, transformed_part_threshold)
+            visualize_pred_label(my_model, gt_shape_path, shape_code, visualize_decoded_part,
+                                 decoded_part_threshold, transformed_part_threshold)
 
     elif mode == 'single':
         # visualize ground truth label
@@ -81,16 +84,16 @@ def evaluate_model(model_path,
 
         # visualize predicted label
         gt_shape_path = os.path.join(single_shape_path, 'object_unlabeled.mat')
-        _visualize_pred_label(my_model, gt_shape_path, shape_code, visualize_decoded_part,
-                              decoded_part_threshold, transformed_part_threshold)
+        visualize_pred_label(my_model, gt_shape_path, shape_code, visualize_decoded_part,
+                             decoded_part_threshold, transformed_part_threshold)
 
 
-def _visualize_pred_label(model,
-                          shape_path,
-                          shape_code,
-                          visualize_decoded_part=False,
-                          decoded_part_threshold=0.5,
-                          transformed_part_threshold=0.5):
+def visualize_pred_label(model,
+                         shape_path,
+                         shape_code,
+                         visualize_decoded_part=False,
+                         decoded_part_threshold=0.5,
+                         transformed_part_threshold=0.5):
     """
     :param model: tensorflow model
     :param shape_path: it should be a list when mode is 'exchange' and 'assembly', should be a str for other modes
@@ -99,14 +102,6 @@ def _visualize_pred_label(model,
     :param decoded_part_threshold: threshold for decoded parts to be visualized
     :param transformed_part_threshold: threshold for transformed parts to be visualized
     """
-
-    def _get_pred_label(pred):
-        code = 0
-        for idx, each_part in enumerate(pred):
-            code += each_part * 2 ** (idx + 1)
-        pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
-        pred_label = pred_label.numpy().astype('uint8')
-        return pred_label
 
     gt_shape = tf.convert_to_tensor(scipy.io.loadmat(shape_path)['data'], dtype=tf.float32)
     gt_shape = tf.expand_dims(gt_shape, 0)
@@ -119,7 +114,7 @@ def _visualize_pred_label(model,
             visualization.visualize(part, title=shape_code)
     else:
         pred = tf.squeeze(tf.where(model_output > transformed_part_threshold, 1., 0.))
-        pred_label = _get_pred_label(pred)
+        pred_label = get_pred_label(pred)
         visualization.visualize(pred_label, title=shape_code)
 
 

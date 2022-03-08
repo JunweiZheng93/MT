@@ -22,13 +22,19 @@ CHAIRS = ['54e2aa868107826f3dbc2ce6b9d89f11', '5042005e178d164481d0f12b8bf5c990'
           '1b7ba5484399d36bc5e50b867ca2d0b9', '2fed64c67552aa689c1db271ad9472a7', '9d7d7607e1ba099bd98e59dfd5823115',
           '875925d42780159ffebad4f49b26ec52', '2025aa3a71f3c468d16ba2cb1292d98a']
 
+AIRPLANES = []
 
-def evaluate_model(model_path,
-                   H=32,
-                   W=32,
-                   D=32,
-                   C=1,
-                   which_gpu=0):
+LAMPS = []
+
+TABLES = []
+
+
+def pick(model_path,
+         H=32,
+         W=32,
+         D=32,
+         C=1,
+         which_gpu=0):
 
     # disable warning and info message, only enable error message
     tf.get_logger().setLevel('ERROR')
@@ -106,11 +112,20 @@ def get_dataset(category, batch_size, max_num_parts):
 
 
 def get_fp(category):
+
     if category == 'chair':
         category_fp = os.path.join(PROJ_ROOT, 'datasets', '03001627')
         shape_paths = [os.path.join(category_fp, shape_name) for shape_name in CHAIRS]
+    elif category == 'airplane':
+        category_fp = os.path.join(PROJ_ROOT, 'datasets', '02691156')
+        shape_paths = [os.path.join(category_fp, shape_name) for shape_name in AIRPLANES]
+    elif category == 'lamp':
+        category_fp = os.path.join(PROJ_ROOT, 'datasets', '03636649')
+        shape_paths = [os.path.join(category_fp, shape_name) for shape_name in LAMPS]
     else:
-        pass
+        category_fp = os.path.join(PROJ_ROOT, 'datasets', '04379243')
+        shape_paths = [os.path.join(category_fp, shape_name) for shape_name in TABLES]
+
     voxel_grid_fp = list()
     part_fp = list()
     trans_fp = list()
@@ -160,9 +175,9 @@ if __name__ == '__main__':
     parser.add_argument('-gpu', default=0, help='use which gpu. Default is 0')
     args = parser.parse_args()
 
-    evaluate_model(model_path=args.model_path,
-                   H=int(args.H),
-                   W=int(args.W),
-                   D=int(args.D),
-                   C=int(args.C),
-                   which_gpu=int(args.gpu))
+    pick(model_path=args.model_path,
+         H=int(args.H),
+         W=int(args.W),
+         D=int(args.D),
+         C=int(args.C),
+         which_gpu=int(args.gpu))
