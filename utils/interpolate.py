@@ -1,9 +1,10 @@
 import tensorflow as tf
 import sys
 import os
-PROJ_ROOT = os.path.abspath(__file__)[:-23]
+PROJ_ROOT = os.path.abspath(__file__)[:-21]
 sys.path.append(PROJ_ROOT)
-from utils.cherry_pick import configure_gpu
+from utils.pick import configure_gpu, get_pred_label
+from utils.swap import get_saved_dir
 from utils.dataloader import CATEGORY_MAP
 import importlib
 import scipy.io
@@ -17,8 +18,7 @@ from tensorflow.keras.utils import Progbar
 def interpolation(model_path,
                   shape1,
                   shape2,
-                  category='chair',
-                  visualize=False,
+                  category,
                   H_crop_factor=0.2,
                   W_crop_factor=0.55,
                   H_shift=15,
@@ -29,19 +29,12 @@ def interpolation(model_path,
                   C=1,
                   which_gpu=0):
 
-    def _get_pred_label(pred):
-        code = 0
-        for idx, each_part in enumerate(pred):
-            code += each_part * 2 ** (idx + 1)
-        pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
-        pred_label = pred_label.numpy().astype('uint8')
-        return pred_label
-
     # disable warning and info message, only enable error message
     tf.get_logger().setLevel('ERROR')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     configure_gpu(which_gpu)
+    saved_dir = get_saved_dir(PROJ_ROOT, 'interpolate')
 
     model = importlib.import_module(f"results.{model_path.split('/')[-3]}.model")
     hparam = importlib.import_module(f"results.{model_path.split('/')[-3]}.hparam")
@@ -75,20 +68,8 @@ def interpolation(model_path,
         unlabeled_shape_list.append(tf.cast(tf.stack((unlabeled_shape1, unlabeled_shape2), axis=0), dtype=tf.float32))
         labeled_shape_list.append([labeled_shape1, labeled_shape2])
 
-    base_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'interpolation')
-    saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'interpolation')
-    count = 0
-    while True:
-        if os.path.exists(saved_dir):
-            saved_dir = f'{base_dir}_{count}'
-            count += 1
-            continue
-        else:
-            os.makedirs(saved_dir)
-            break
-
     pb = Progbar(len(labeled_shape_list))
-    print('Saving interpolated images, please wait...')
+    print('Saving images, please wait...')
     for count, (unlabeled_shape, labeled_shape, hash_code) in enumerate(zip(unlabeled_shape_list, labeled_shape_list, hash_codes)):
         shape_latent = interpolate_latent(my_model, unlabeled_shape)
 
@@ -96,23 +77,13 @@ def interpolation(model_path,
         fake_input = 0
         shape_outputs = my_model(fake_input, training=False, decomposer_output=shape_latent)
 
-        if visualize:
-            # visualize gt
-            for gt, code in zip(labeled_shape, hash_code):
-                visualization.visualize(gt, title=code)
-            # visualize shape interpolation
-            for shape_output in shape_outputs:
-                shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
-                shape_output = _get_pred_label(shape_output)
-                visualization.visualize(shape_output, title=hash_code[0])
-
-        visualization.save_visualized_img(labeled_shape[0], os.path.join(saved_dir, f'gt_{count}_0_{hash_code[0]}.png'))
-        visualization.save_visualized_img(labeled_shape[1], os.path.join(saved_dir, f'gt_{count}_1_{hash_code[1]}.png'))
+        visualization.save_visualized_img(labeled_shape[0], os.path.join(saved_dir, f'gt_{count}0_{hash_code[0]}.png'))
+        visualization.save_visualized_img(labeled_shape[1], os.path.join(saved_dir, f'gt_{count}1_{hash_code[1]}.png'))
 
         for i, shape_output in enumerate(shape_outputs):
             shape_output = tf.squeeze(tf.where(shape_output > 0.5, 1., 0.))
-            shape_output = _get_pred_label(shape_output)
-            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'interpolation_{count}_{i}_{hash_code[0]}.png'))
+            shape_output = get_pred_label(shape_output)
+            visualization.save_visualized_img(shape_output, os.path.join(saved_dir, f'interpolate_{count}{i}_{hash_code[0]}.png'))
         pb.update(count+1)
 
     print('Stacking all images together, please wait...')
@@ -134,8 +105,8 @@ def interpolate_latent(my_model, unlabeled_shape):
     latent_diff = latent_array2 - latent_array1
 
     # interpolate latent
-    for i in range(10):
-        full_shape_latent_list.append(latent_array1 + i / 9 * latent_diff)
+    for i in range(8):
+        full_shape_latent_list.append(latent_array1 + i / 7 * latent_diff)
     full_shape_latent = tf.cast(tf.stack(full_shape_latent_list, axis=0), dtype=tf.float32)
     return full_shape_latent
 
@@ -144,11 +115,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'), help='path of the model')
+    parser.add_argument('model_path', help='path of the model')
     parser.add_argument('-s1', '--shape1', nargs='+', default=['96929c12a4a6b15a492d9da2668ec34c', '2a56e3e2a6505ec492d9da2668ec34c'], help='hash code of the first full shape.')
     parser.add_argument('-s2', '--shape2', nargs='+', default=['3c408a4ad6d57c3651bc6269fcd1b4c0', '88aec853dcb10d526efa145e9f4a2693'], help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
-    parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
     parser.add_argument('--W_crop_factor', default=0.55, help='Percentage to crop empty spcae of every single image in W direction. Only valid when save_img is True')
     parser.add_argument('--H_shift', default=15, help='How many pixels to be shifted for the cropping of every single image in H direction. Only valid when save_img is True')
@@ -164,7 +134,6 @@ if __name__ == '__main__':
                   shape1=args.shape1,
                   shape2=args.shape2,
                   category=args.category,
-                  visualize=args.visualize,
                   H_crop_factor=float(args.H_crop_factor),
                   W_crop_factor=float(args.W_crop_factor),
                   H_shift=int(args.H_shift),

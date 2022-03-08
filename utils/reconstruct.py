@@ -1,13 +1,14 @@
 import sys
 import os
-PROJ_ROOT = os.path.abspath(__file__)[:-23]
+PROJ_ROOT = os.path.abspath(__file__)[:-20]
 sys.path.append(PROJ_ROOT)
 import tensorflow as tf
 from dataloader import CATEGORY_MAP
 import scipy.io
 from utils import visualization
 import importlib
-from utils.cherry_pick import configure_gpu
+from utils.pick import configure_gpu, get_pred_label
+from utils.swap import get_saved_dir
 import numpy as np
 from tensorflow.keras.utils import Progbar
 from multiprocessing import Process
@@ -16,16 +17,14 @@ from utils.stack_plot import stack_reconstruction_plot
 import argparse
 
 
-def reconstruct(ori_model_p2=os.path.join(PROJ_ROOT, 'results', '20220223231500', 'process_2', 'checkpoint.h5'),
-                ori_model_p3=os.path.join(PROJ_ROOT, 'results', '20220304165205', 'process_3', 'checkpoint.h5'),
-                notkeepC_model_p2=os.path.join(PROJ_ROOT, 'results', '20220226040200', 'process_2', 'checkpoint.h5'),
-                notkeepC_model_p3=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'),
-                keepC_model_p2=os.path.join(PROJ_ROOT, 'results', '20220302153926', 'process_2', 'checkpoint.h5'),
-                keepC_model_p3=os.path.join(PROJ_ROOT, 'results', '20220305142017', 'process_3', 'checkpoint.h5'),
-                hash_codes=('1b7ba5484399d36bc5e50b867ca2d0b9', '9d7d7607e1ba099bd98e59dfd5823115', '5b9ebc70e9a79b69c77d45d65dc3714',
-                            '88aec853dcb10d526efa145e9f4a2693', '5893038d979ce1bb725c7e2164996f48', '96929c12a4a6b15a492d9da2668ec34c',
-                            '2207db2fa2e4cc4579b3e1be3524f72f'),
-                category='chair',
+def reconstruct(ori_model_p2,
+                ori_model_p3,
+                notkeepC_model_p2,
+                notkeepC_model_p3,
+                keepC_model_p2,
+                keepC_model_p3,
+                hash_codes,
+                category,
                 H_crop_factor=0.2,
                 W_crop_factor=0.5,
                 H_shift=15,
@@ -41,18 +40,7 @@ def reconstruct(ori_model_p2=os.path.join(PROJ_ROOT, 'results', '20220223231500'
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     configure_gpu(which_gpu)
-
-    base_dir = os.path.join(PROJ_ROOT, 'results', 'reconstruction')
-    saved_dir = os.path.join(PROJ_ROOT, 'results', 'reconstruction')
-    count = 0
-    while True:
-        if os.path.exists(saved_dir):
-            saved_dir = f'{base_dir}_{count}'
-            count += 1
-            continue
-        else:
-            os.makedirs(saved_dir)
-            break
+    saved_dir = get_saved_dir(PROJ_ROOT, 'reconstruct')
 
     unlabeled_shape_list = list()
     pb1 = Progbar(len(hash_codes))
@@ -60,7 +48,7 @@ def reconstruct(ori_model_p2=os.path.join(PROJ_ROOT, 'results', '20220223231500'
     for i, code in enumerate(hash_codes):
         unlabeled_path = os.path.join(PROJ_ROOT, 'datasets', CATEGORY_MAP[category], code, 'object_unlabeled.mat')
         unlabeled_shape = scipy.io.loadmat(unlabeled_path)['data']
-        visualization.save_visualized_img(unlabeled_shape, os.path.join(saved_dir, f'gt_{i+1}_{code}.png'), is_unlabeled_gt=True)
+        visualization.save_visualized_img(unlabeled_shape, os.path.join(saved_dir, f'gt_{i}_{code}.png'), is_unlabeled_gt=True)
         unlabeled_shape = unlabeled_shape[..., np.newaxis]
         unlabeled_shape_list.append(unlabeled_shape)
         pb1.update(i+1)
@@ -97,7 +85,7 @@ def save_reconstruction_images(path, unlabeled_shape_list, H, W, D, C, saved_dir
     predictions = get_prediction(path, unlabeled_shape_list, H, W, D, C)
     for i, pred in enumerate(predictions):
         pred = get_pred_label(tf.squeeze(tf.where(pred > 0.5, 1., 0.)))
-        visualization.save_visualized_img(pred, os.path.join(saved_dir, f'{prefix}_{i+1}_{hash_codes[i]}.png'))
+        visualization.save_visualized_img(pred, os.path.join(saved_dir, f'{prefix}_{i}_{hash_codes[i]}.png'))
 
 
 def get_prediction(path, unlabeled_shape_list, H, W, D, C):
@@ -114,24 +102,15 @@ def get_prediction(path, unlabeled_shape_list, H, W, D, C):
     return my_model(unlabeled_shape, training=False)
 
 
-def get_pred_label(pred):
-    code = 0
-    for idx, each_part in enumerate(pred):
-        code += each_part * 2 ** (idx + 1)
-    pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
-    pred_label = pred_label.numpy().astype('uint8')
-    return pred_label
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--ori_model_p2', default=os.path.join(PROJ_ROOT, 'results', '20220223231500', 'process_2', 'checkpoint.h5'), help='path of the ori p2 model')
-    parser.add_argument('--ori_model_p3', default=os.path.join(PROJ_ROOT, 'results', '20220304165205', 'process_3', 'checkpoint.h5'), help='path of the ori p3 model')
-    parser.add_argument('--notkeepC_model_p2', default=os.path.join(PROJ_ROOT, 'results', '20220226040200', 'process_2', 'checkpoint.h5'), help='path of the notkeepC p2 model')
-    parser.add_argument('--notkeepC_model_p3', default=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'), help='path of the notkeepC p3 model')
-    parser.add_argument('--keepC_model_p2', default=os.path.join(PROJ_ROOT, 'results', '20220302153926', 'process_2', 'checkpoint.h5'), help='path of the keepC p2 model')
-    parser.add_argument('--keepC_model_p3', default=os.path.join(PROJ_ROOT, 'results', '20220305142017', 'process_3', 'checkpoint.h5'), help='path of the keepC p3 model')
+    parser.add_argument('ori_model_p2', help='path of the ori p2 model')
+    parser.add_argument('ori_model_p3', help='path of the ori p3 model')
+    parser.add_argument('notkeepC_model_p2', help='path of the notkeepC p2 model')
+    parser.add_argument('notkeepC_model_p3', help='path of the notkeepC p3 model')
+    parser.add_argument('keepC_model_p2', help='path of the keepC p2 model')
+    parser.add_argument('keepC_model_p3', help='path of the keepC p3 model')
     parser.add_argument('--hash_codes', nargs='+', help='hash code of the shapes to be reconstructed', default=['1b7ba5484399d36bc5e50b867ca2d0b9', '9d7d7607e1ba099bd98e59dfd5823115',
                                                                                                                 '5b9ebc70e9a79b69c77d45d65dc3714', '88aec853dcb10d526efa145e9f4a2693',
                                                                                                                 '5893038d979ce1bb725c7e2164996f48', '96929c12a4a6b15a492d9da2668ec34c',

@@ -76,28 +76,28 @@ def stack_interpolation_plot(input_img_dir,
     H_img_end = int(H_img_start+240*(1-H_crop_factor))
     W_img_end = int(W_img_start+320*(1-W_crop_factor))
     H_fig = 2.4*(1-H_crop_factor)*len(gt_list)/2
-    W_fig = 3.2*(1-W_crop_factor)*12  # 12 images per row
+    W_fig = 3.2*(1-W_crop_factor)*10  # 10 images per row
 
     fig = plt.figure(figsize=(W_fig, H_fig))
     for i in range(int(len(gt_list)/2)):
-        for j in range(12):
-            ax = fig.add_axes([j/12, 1-((1+i)/len(gt_list)*2), 1/12, 1/len(gt_list)*2])
+        for j in range(10):
+            ax = fig.add_axes([j/10, 1-((1+i)/len(gt_list)*2), 1/10, 1/len(gt_list)*2])
             ax.axis('off')
             if j == 0:
                 ax.imshow(plt.imread(gt_list[0+2*i])[H_img_start:H_img_end, W_img_start:W_img_end])
-            elif j == 11:
+            elif j == 9:
                 ax.imshow(plt.imread(gt_list[1+2*i])[H_img_start:H_img_end, W_img_start:W_img_end])
             else:
-                ax.imshow(plt.imread(interpolation_list[j-1+10*i])[H_img_start:H_img_end, W_img_start:W_img_end])
+                ax.imshow(plt.imread(interpolation_list[j-1+8*i])[H_img_start:H_img_end, W_img_start:W_img_end])
 
     plt.savefig(os.path.join(input_img_dir, 'stacked_image.png'))
 
 
-def stack_assembly_plot(input_img_dir,
-                        H_crop_factor=0.2,
-                        W_crop_factor=0.55,
-                        H_shift=15,
-                        W_shift=40):
+def stack_mix_plot(input_img_dir,
+                   H_crop_factor=0.2,
+                   W_crop_factor=0.55,
+                   H_shift=15,
+                   W_shift=40):
     images = sorted(os.listdir(input_img_dir))
     gt_list = list()
     mixed_list = list()

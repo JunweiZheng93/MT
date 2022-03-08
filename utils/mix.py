@@ -1,9 +1,10 @@
 import tensorflow as tf
 import sys
 import os
-PROJ_ROOT = os.path.abspath(__file__)[:-18]
+PROJ_ROOT = os.path.abspath(__file__)[:-13]
 sys.path.append(PROJ_ROOT)
-from utils.cherry_pick import configure_gpu
+from utils.pick import configure_gpu, get_pred_label
+from utils.swap import get_saved_dir
 from utils.dataloader import CATEGORY_MAP
 import importlib
 import scipy.io
@@ -14,34 +15,26 @@ from utils import stack_plot
 from tensorflow.keras.utils import Progbar
 
 
-def assembly(model_path,
-             shape,
-             seed=0,
-             category='chair',
-             visualize=False,
-             H_crop_factor=0.2,
-             W_crop_factor=0.55,
-             H_shift=15,
-             W_shift=40,
-             H=32,
-             W=32,
-             D=32,
-             C=1,
-             which_gpu=0):
-
-    def _get_pred_label(pred):
-        code = 0
-        for idx, each_part in enumerate(pred):
-            code += each_part * 2 ** (idx + 1)
-        pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
-        pred_label = pred_label.numpy().astype('uint8')
-        return pred_label
+def mix(model_path,
+        shape,
+        seed,
+        category,
+        H_crop_factor=0.2,
+        W_crop_factor=0.55,
+        H_shift=15,
+        W_shift=40,
+        H=32,
+        W=32,
+        D=32,
+        C=1,
+        which_gpu=0):
 
     # disable warning and info message, only enable error message
     tf.get_logger().setLevel('ERROR')
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     configure_gpu(which_gpu)
+    saved_dir = get_saved_dir(PROJ_ROOT, 'mix')
 
     model = importlib.import_module(f"results.{model_path.split('/')[-3]}.model")
     hparam = importlib.import_module(f"results.{model_path.split('/')[-3]}.hparam")
@@ -67,49 +60,26 @@ def assembly(model_path,
         labeled_shape_list.append(labeled_shape)
     unlabeled_shape = tf.cast(tf.stack(unlabeled_shape_list, axis=0), dtype=tf.float32)
 
-    base_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'assembly')
-    saved_dir = os.path.join(PROJ_ROOT, 'results', model_path.split('/')[-3], 'assembly')
-    count = 0
-    while True:
-        if os.path.exists(saved_dir):
-            saved_dir = f'{base_dir}_{count}'
-            count += 1
-            continue
-        else:
-            os.makedirs(saved_dir)
-            break
-
-    mixed_latent = assemble_latent(my_model, unlabeled_shape, seed)
+    mixed_latent = mix_latent(my_model, unlabeled_shape, seed)
 
     # mixed reconstruction
     fake_input = 0
     mixed_outputs = my_model(fake_input, training=False, decomposer_output=mixed_latent)
 
-    if visualize:
-        # visualize gt
-        for gt, hash_code in zip(labeled_shape_list, shape):
-            visualization.visualize(gt, title=hash_code)
-
-        # visualize mixed reconstruction
-        for mixed_output in mixed_outputs:
-            mixed_output = tf.squeeze(tf.where(mixed_output > 0.5, 1., 0.))
-            mixed_output = _get_pred_label(mixed_output)
-            visualization.visualize(mixed_output)
-
     pb = Progbar(len(labeled_shape_list))
     print('Saving images, please wait...')
     for count, (gt, mixed_output, code) in enumerate(zip(labeled_shape_list, mixed_outputs, shape)):
         mixed_output = tf.squeeze(tf.where(mixed_output > 0.5, 1., 0.))
-        mixed_output = _get_pred_label(mixed_output)
-        visualization.save_visualized_img(gt, os.path.join(saved_dir, f'{code}_gt.png'))
-        visualization.save_visualized_img(mixed_output, os.path.join(saved_dir, f'{code}_assembled.png'))
+        mixed_output = get_pred_label(mixed_output)
+        visualization.save_visualized_img(gt, os.path.join(saved_dir, f'gt_{count}_{code}.png'))
+        visualization.save_visualized_img(mixed_output, os.path.join(saved_dir, f'mix_{count}_{code}.png'))
         pb.update(count+1)
     print('Stacking all images together, please wait...')
-    stack_plot.stack_assembly_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
+    stack_plot.stack_mix_plot(saved_dir, H_crop_factor=H_crop_factor, W_crop_factor=W_crop_factor, H_shift=H_shift, W_shift=W_shift)
     print(f'Done! All images are saved in {saved_dir}')
 
 
-def assemble_latent(my_model, unlabeled_shape, seed):
+def mix_latent(my_model, unlabeled_shape, seed):
 
     # get latent representation
     latent = my_model.decomposer(unlabeled_shape, training=False)
@@ -132,12 +102,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'), help='path of the model')
-    parser.add_argument('-s', '--shape', nargs='+', help='hash code of the shapes to be assembled.', default=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48', 'cd9702520ad57689bbc7a6acbd8f058b',
-                                                                                                              '5042005e178d164481d0f12b8bf5c990', '88aec853dcb10d526efa145e9f4a2693', 'a5a5d118118eb760fee31d33418a3c16'])
+    parser.add_argument('model_path', help='path of the model')
+    parser.add_argument('-s', '--shape', nargs='+', help='hash code of the shapes to be mixed.', default=['5b9ebc70e9a79b69c77d45d65dc3714', '611f235819b7c26267d783b4714d4324', '7e5a6a86dc490f7e7288e3849fb636ff',
+                                                                                                          '3c408a4ad6d57c3651bc6269fcd1b4c0', '54e2aa868107826f3dbc2ce6b9d89f11', '9db1302f2fd980cf3cca2657c9d0b9e4'])
     parser.add_argument('--seed', default=6, help='seed for the random mixed order. Default is 6')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
-    parser.add_argument('-v', '--visualize', action='store_true', help='whether visualize the result or not')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
     parser.add_argument('--W_crop_factor', default=0.55, help='Percentage to crop empty spcae of every single image in W direction. Only valid when save_img is True')
     parser.add_argument('--H_shift', default=15, help='How many pixels to be shifted for the cropping of every single image in H direction. Only valid when save_img is True')
@@ -149,17 +118,16 @@ if __name__ == '__main__':
     parser.add_argument('-gpu', default=0, help='use which gpu. Default is 0')
     args = parser.parse_args()
 
-    assembly(model_path=args.model_path,
-             shape=args.shape,
-             seed=int(args.seed),
-             category=args.category,
-             visualize=args.visualize,
-             H_crop_factor=float(args.H_crop_factor),
-             W_crop_factor=float(args.W_crop_factor),
-             H_shift=int(args.H_shift),
-             W_shift=int(args.W_shift),
-             H=int(args.H),
-             W=int(args.W),
-             D=int(args.D),
-             C=int(args.C),
-             which_gpu=int(args.gpu))
+    mix(model_path=args.model_path,
+        shape=args.shape,
+        seed=int(args.seed),
+        category=args.category,
+        H_crop_factor=float(args.H_crop_factor),
+        W_crop_factor=float(args.W_crop_factor),
+        H_shift=int(args.H_shift),
+        W_shift=int(args.W_shift),
+        H=int(args.H),
+        W=int(args.W),
+        D=int(args.D),
+        C=int(args.C),
+        which_gpu=int(args.gpu))

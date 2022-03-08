@@ -3,7 +3,7 @@ import sys
 import os
 PROJ_ROOT = os.path.abspath(__file__)[:-14]
 sys.path.append(PROJ_ROOT)
-from utils.cherry_pick import configure_gpu
+from utils.pick import configure_gpu, get_pred_label
 from utils.dataloader import CATEGORY_MAP
 import importlib
 import scipy.io
@@ -19,10 +19,10 @@ import multiprocessing as mp
 
 def swap(ori_model_path,
          attention_model_path,
-         which_part=(1, 3),
-         shape1=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48'],
-         shape2=['9d7d7607e1ba099bd98e59dfd5823115', '54e2aa868107826f3dbc2ce6b9d89f11'],
-         category='chair',
+         which_part,
+         shape1,
+         shape2,
+         category,
          H_crop_factor=0.2,
          W_crop_factor=0.55,
          H_shift=15,
@@ -38,23 +38,12 @@ def swap(ori_model_path,
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     configure_gpu(which_gpu)
+    saved_dir = get_saved_dir(PROJ_ROOT, 'swap')
 
     # get hash code of the shapes
     hash_codes = list()
     for first, second in zip(shape1, shape2):
         hash_codes.append((first, second))
-
-    base_dir = os.path.join(PROJ_ROOT, 'results', 'swap')
-    saved_dir = os.path.join(PROJ_ROOT, 'results', 'swap')
-    count = 0
-    while True:
-        if os.path.exists(saved_dir):
-            saved_dir = f'{base_dir}_{count}'
-            count += 1
-            continue
-        else:
-            os.makedirs(saved_dir)
-            break
 
     # get unlabeled shapes and labeled shapes
     unlabeled_shape_list = list()
@@ -70,8 +59,8 @@ def swap(ori_model_path,
         unlabeled_shape2 = scipy.io.loadmat(unlabeled_path2)['data'][..., np.newaxis]
         labeled_shape1 = scipy.io.loadmat(labeled_path1)['data']
         labeled_shape2 = scipy.io.loadmat(labeled_path2)['data']
-        visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'{count}0_{code1}_gt.png'))
-        visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'{count}1_{code2}_gt.png'))
+        visualization.save_visualized_img(labeled_shape1, os.path.join(saved_dir, f'gt_{count}0_{code1}.png'))
+        visualization.save_visualized_img(labeled_shape2, os.path.join(saved_dir, f'gt_{count}1_{code2}.png'))
         unlabeled_shape_list.append([unlabeled_shape1, unlabeled_shape2])
         labeled_shape_list.append([labeled_shape1, labeled_shape2])
         pb.update(count+1)
@@ -114,8 +103,8 @@ def save_swap_images(path, unlabeled_shape_list, hash_codes, which_part, H, W, D
         for i, (output, swapped_output) in enumerate(zip(outputs, swapped_outputs)):
             output = get_pred_label(tf.squeeze(tf.where(output > 0.5, 1., 0.)))
             swapped_output = get_pred_label(tf.squeeze(tf.where(swapped_output > 0.5, 1., 0.)))
-            visualization.save_visualized_img(output, os.path.join(save_dir, f'{prefix}_recon_{count}{i}_{hash_code[i]}.png'))
-            visualization.save_visualized_img(swapped_output, os.path.join(save_dir, f'{prefix}_swap{int(which)}_{count}{i}_{hash_code[i]}.png'))
+            visualization.save_visualized_img(output, os.path.join(save_dir, f'recon_{prefix}_{count}{i}_{hash_code[i]}.png'))
+            visualization.save_visualized_img(swapped_output, os.path.join(save_dir, f'swap_{prefix}_{count}{i}_{hash_code[i]}.png'))
 
 
 def swap_latent(my_model, unlabeled_shape, which_part):
@@ -134,24 +123,29 @@ def swap_latent(my_model, unlabeled_shape, which_part):
     return latent, swapped_latent
 
 
-def get_pred_label(pred):
-    code = 0
-    for idx, each_part in enumerate(pred):
-        code += each_part * 2 ** (idx + 1)
-    pred_label = tf.math.floor(tf.experimental.numpy.log2(code + 1))
-    pred_label = pred_label.numpy().astype('uint8')
-    return pred_label
+def get_saved_dir(proj_root, mode):
+    base_dir = os.path.join(proj_root, 'results', 'figures', mode)
+    saved_dir = os.path.join(proj_root, 'results', 'figures', mode)
+    count = 1
+    while True:
+        if os.path.exists(saved_dir):
+            saved_dir = f'{base_dir}_{count}'
+            count += 1
+            continue
+        else:
+            os.makedirs(saved_dir)
+            return saved_dir
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--ori_model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304165205', 'process_3', 'checkpoint.h5'), help='path of the ori model')
-    parser.add_argument('--attention_model_path', default=os.path.join(PROJ_ROOT, 'results', '20220304214444', 'process_3', 'checkpoint.h5'), help='path of the attention model')
-    parser.add_argument('-w', '--which_part', default=[1, 3], nargs='+', help='which part to be swapped')
-    parser.add_argument('-s1', '--shape1', default=['1bbe463ba96415aff1783a44a88d6274', '5893038d979ce1bb725c7e2164996f48'], nargs='+', help='hash code of the first full shape.')
-    parser.add_argument('-s2', '--shape2', default=['9d7d7607e1ba099bd98e59dfd5823115', '54e2aa868107826f3dbc2ce6b9d89f11'], nargs='+', help='hash code of the second full shape.')
+    parser.add_argument('ori_model_path', help='path of the ori model')
+    parser.add_argument('attention_model_path', help='path of the attention model')
+    parser.add_argument('-w', '--which_part', default=[3, 1], nargs='+', help='which part to be swapped')
+    parser.add_argument('-s1', '--shape1', default=['975ea4be01c7488611bc8e8361bc5303', '9d7d7607e1ba099bd98e59dfd5823115'], nargs='+', help='hash code of the first full shape.')
+    parser.add_argument('-s2', '--shape2', default=['297d3e472bf3198fb99cbd993f914184', '1bbe463ba96415aff1783a44a88d6274'], nargs='+', help='hash code of the second full shape.')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('--H_crop_factor', default=0.2, help='Percentage to crop empty spcae of every single image in H direction. Only valid when save_img is True')
     parser.add_argument('--W_crop_factor', default=0.5, help='Percentage to crop empty spcae of every single image in W direction. Only valid when save_img is True')

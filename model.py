@@ -788,9 +788,9 @@ class Model(keras.Model):
                     if len(self.attention_output_list) < 2:
                         raise ValueError('which_layer should at least contain 2 layers when use_ac_loss is True!')
                     ac_loss = self._cal_ac_loss(self.temp) if self.keep_channel else self._cal_ac_loss(self.attention_output_list)
-                    total_loss = pi_loss + part_recon_loss + trans_loss + ac_loss + shape_recon_loss
+                    total_loss = pi_loss + part_recon_loss + 10 * trans_loss + ac_loss + 10 * shape_recon_loss
                 else:
-                    total_loss = pi_loss + part_recon_loss + trans_loss + shape_recon_loss
+                    total_loss = pi_loss + part_recon_loss + 10 * trans_loss + 10 * shape_recon_loss
             if self.use_ac_loss:
                 grads = tape.gradient(total_loss, self.trainable_weights)
                 self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
