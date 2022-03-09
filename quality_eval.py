@@ -124,8 +124,7 @@ if __name__ == '__main__':
 
     parser.add_argument('model_path', help='path of the model')
     parser.add_argument('-m', '--mode', default='batch', help='visualize a batch of shapes or just a single shape. '
-                                                              'Valid values are batch, single, exchange and assembly. '
-                                                              'Default is batch')
+                                                              'Valid values are batch and single. Default is batch')
     parser.add_argument('-c', '--category', default='chair', help='which kind of shape to visualize. Default is chair')
     parser.add_argument('-n', '--num_to_visualize', default=4, help='the number of shape to be visualized. Only valid'
                                                                     'when \'mode\' is \'batch\'')
