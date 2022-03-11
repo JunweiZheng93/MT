@@ -43,7 +43,12 @@ TABLES = ['1a43bd2e53364313f51f77a6d7299806', '1a00aa6b75362cc5b324368d54a7416f'
           '2d7c48df632589a7ad5067eac75a07f7', '2f9c9357bfb89ac1d38913e96bbf2a5d', '3a990272ef4b83ca8d3e8783b997c75',
           '3b3b35ab4412c3263edd525d249a1362', '3ed500a12dfa511ba6040757a0125a99', '6f58b8c1d826a301a97bcacc05204e5c']
 
-GUITAR = []
+GUITAR = ['1a96f73d0929bd4793f0194265a9746c', '1a680e3308f2aac544b2fa2cac0778f5', '1a8512735ed86bc52d7d603c684cb89e',
+          '1abe78447898821e93f0194265a9746c', '1b65d2e0c0ed78237e1c85c5c15da7fb', '1c8c6874c0cb9bc73429c1c21d77499d',
+          '2c1b6a4fb58b04371a3c749a0d8db8f3', '2c2fc56385be92b493f0194265a9746c', '2c491c5718322fc4849457db85ec22c6',
+          '2cbc0faddf227502bbc745a3524d966b', '2dbc73ad4ce7950163e148e250c0340d', '2eba922263fc1580cc010a80df5d3c87',
+          '2f1ef453d18cc88d74f1a026675e6353', '2f9d51c98d517ed1b647271c21ec40', '3f94fd316d4f2ca1d57700c05b1862d8',
+          '3fba85bfdb125b1b93f0194265a9746c', '4a704919068627caeae5cab1248d1ec6', '4ae5a491c3ffb473462c6cdd250c26bb']
 
 
 def pick(model_path,
@@ -142,9 +147,11 @@ def get_fp(category):
     elif category == 'guitar':
         category_fp = os.path.join(PROJ_ROOT, 'datasets', '03467517')
         shape_paths = [os.path.join(category_fp, shape_name) for shape_name in GUITAR]
-    else:
+    elif category == 'table':
         category_fp = os.path.join(PROJ_ROOT, 'datasets', '04379243')
         shape_paths = [os.path.join(category_fp, shape_name) for shape_name in TABLES]
+    else:
+        raise ValueError('category should be one of chair, table, airplane, guitar and lamp!')
 
     voxel_grid_fp = list()
     part_fp = list()
