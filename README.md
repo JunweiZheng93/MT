@@ -123,6 +123,10 @@ lamp: [03636649.zip(200MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/ra
 number of shapes: 1546 <br>
 maximal number of parts: 4
 
+lamp: [03467517.zip(43MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false) <br>
+number of shapes: 787 <br>
+maximal number of parts: 3
+
 ### Visualize dataset
 
 The generated dataset consists of some PNG images and `.mat` files. To visualize `.mat` files, please run:

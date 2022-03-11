@@ -5,11 +5,12 @@ import math
 import scipy.io
 from tensorflow.keras.utils import Sequence, Progbar
 
-CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649'}
+CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649', 'guitar': '03467517'}
 URL_MAP = {'chair': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03001627.zip?inline=false',
            'table': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/04379243.zip?inline=false',
            'airplane': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/02691156.zip?inline=false',
-           'lamp': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false'}
+           'lamp': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false',
+           'guitar': 'https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03467517.zip?inline=false'}
 PROJ_ROOT = os.path.abspath(__file__)[:-19]
 
 

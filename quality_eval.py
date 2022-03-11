@@ -28,8 +28,8 @@ def evaluate_model(model_path,
                    transformed_part_threshold=0.5):
 
     # check category
-    if category not in ['chair', 'table', 'airplane', 'lamp']:
-        raise ValueError('category should be one of chair, table, airplane and lamp!')
+    if category not in ['chair', 'table', 'airplane', 'lamp', 'guitar']:
+        raise ValueError('category should be one of chair, table, airplane, guitar and lamp!')
 
     # disable warning and info message, only enable error message
     tf.get_logger().setLevel('ERROR')

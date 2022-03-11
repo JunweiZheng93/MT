@@ -10,9 +10,6 @@ from utils.pick import configure_gpu
 from tensorflow.keras.utils import Progbar
 
 
-CATEGORY_MAP = {'chair': '03001627', 'table': '04379243', 'airplane': '02691156', 'lamp': '03636649'}
-
-
 def evaluate_model(model_path,
                    which_gpu=0,
                    H=32,

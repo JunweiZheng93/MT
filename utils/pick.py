@@ -43,6 +43,8 @@ TABLES = ['1a43bd2e53364313f51f77a6d7299806', '1a00aa6b75362cc5b324368d54a7416f'
           '2d7c48df632589a7ad5067eac75a07f7', '2f9c9357bfb89ac1d38913e96bbf2a5d', '3a990272ef4b83ca8d3e8783b997c75',
           '3b3b35ab4412c3263edd525d249a1362', '3ed500a12dfa511ba6040757a0125a99', '6f58b8c1d826a301a97bcacc05204e5c']
 
+GUITAR = []
+
 
 def pick(model_path,
          H=32,
@@ -137,6 +139,9 @@ def get_fp(category):
     elif category == 'lamp':
         category_fp = os.path.join(PROJ_ROOT, 'datasets', '03636649')
         shape_paths = [os.path.join(category_fp, shape_name) for shape_name in LAMPS]
+    elif category == 'guitar':
+        category_fp = os.path.join(PROJ_ROOT, 'datasets', '03467517')
+        shape_paths = [os.path.join(category_fp, shape_name) for shape_name in GUITAR]
     else:
         category_fp = os.path.join(PROJ_ROOT, 'datasets', '04379243')
         shape_paths = [os.path.join(category_fp, shape_name) for shape_name in TABLES]
