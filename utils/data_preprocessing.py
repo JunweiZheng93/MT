@@ -205,16 +205,14 @@ if __name__ == '__main__':
                                                  'grid and its label.')
 
     # positional arguments
-    parser.add_argument('pcd_fp', help='path of point cloud data. '
-                                       'For example, \'./shapenetcore_partanno_segmentation_benchmark_v0/03001627/\'')
+    parser.add_argument('semantic_label_fp', help='path of the semantic label. For example, \'./shapenetcore_partanno_segmentation_benchmark_v0/03001627/\'')
     parser.add_argument('binvox_fp', help='path of binvox files. For example, \'./ShapeNetVox32/03001627/\'')
     parser.add_argument('output_fp', help='path to save the processed data. For example, \'./datasets/\'')
 
     # optional arguments
-    parser.add_argument('-r', '--resolution', default=32, help='resolution to voxelize the point cloud data. should be '
-                                                               'the same as the resolution of binvox file. default 32')
+    parser.add_argument('resolution', help='resolution to voxelize the point cloud data. should be the same as the resolution of binvox file.')
     parser.add_argument('-k', default=5, help='knn parameter for the voxelization. default 5')
 
     args = parser.parse_args()
 
-    process_data(args.pcd_fp, args.binvox_fp, args.output_fp, int(args.resolution), int(args.k))
+    process_data(args.semantic_label_fp, args.binvox_fp, args.output_fp, int(args.resolution), int(args.k))

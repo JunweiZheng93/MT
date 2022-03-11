@@ -41,19 +41,63 @@ We use [ShapeNetCore](https://shapenet.org/) as our dataset. As for the segmente
 which is provided by [A Scalable Active Framework
 for Region Annotation in 3D Shape Collections](https://cs.stanford.edu/~ericyi/project_page/part_annotation/).
 
+The table below is a brief introduction of [shapenetcore_partanno_segmentation_benchmark_v0](https://shapenet.cs.stanford.edu/ericyi/shapenetcore_partanno_segmentation_benchmark_v0.zip):
+
+|   class    | num_parts per shape | num_samples | num_points per shape |
+|:----------:|:-------------------:|:-----------:|:--------------------:|
+|  Airplane  |          4          |    2690     |         2577         |
+|    Bag     |          2          |     76      |        	2749         |
+|    Cap     |          2	        |     55      |        	2631         |
+|    Car     |        	4          |    	898   |        	2763         |
+|   Chair    |        	4	         |    3746    |        	2705         |
+|  Earphone  |        	3	         |     69	  |         2496         |
+|   Guitar   |        	3          |      787    |        	2353         |
+|   Knife	  |        2	          |     392     |       2156         |
+|    Lamp    |        	4          |   	1546	    |       2198         |
+|   Laptop   |        	2	         |     445     |        2757         |
+| Motorbike  |         6	          |    202	     |      2735         |
+|    Mug     |         2	          |    184	     |      2816         |         
+|  Pistol	  |         3	          |     75	     |      2654         |
+|   Rocket   |        	3          |    	66	     |      2358         |
+| Skateboard |        	3	         |    152	     |      2529         |
+|   Table    |        	3	         |    5263	    |       2722         |
+|   Total    |        	50	         |    16846    |        2616         |
+
 ### Prepare dataset from scratch
 
-In order to prepare the dataset from scratch, you need to firstly download 
-[ShapeNetVox32](https://cvgl.stanford.edu/data2/ShapeNetVox32.tgz) and 
-[shapenetcore_partanno_segmentation_benchmark_v0](https://shapenet.cs.stanford.edu/ericyi/shapenetcore_partanno_segmentation_benchmark_v0.zip). 
-ShapeVox32 is the voxelization version of ShapeNetCore, using [binvox](https://www.patrickmin.com/binvox/) for the voxelization. You can also 
-voxelize ShapeNetCore using binvox by yourself instead of downloading ShapeVox32. After downloading and unzip those two datasets, run the 
-following snippet in your favourite terminal application:
+#### Obtain `.binvox` files
+
+##### Method 1
+
+You can voxelize ShapeNetCore by using `utils/obj_to_binvox.py`:
+
 ```bash
-python utils/data_preprocessing.py pcd_category_path binvox_category_path output_path
+python utils/obj_to_binvox.py voxel_grid_resolution obj_category_path output_path 
 ```
-For example, `./shapenetcore_partanno_segmentation_benchmark_v0/03001627/` is the pcd path of the category `chair`. 
-`./ShapeNetVox32/03001627/` is the binvox path of the category `chair`. Output path is the path where you want to save the 
+
+All categories can be downloaded from [here](http://shapenet.cs.stanford.edu/shapenet/obj-zip/), e.g. `03467517.zip`. After downloading and unzipping the category file
+you will get `obj_category_path`, e.g. `~/Download/03467517`.
+
+
+##### Method 2
+
+Download `.binvox` files directly from [here](https://cvgl.stanford.edu/data2/ShapeNetVox32.tgz).
+
+#### Obtain semantic labels for `.binvox` files
+
+Download the semantic labels from [here](https://shapenet.cs.stanford.edu/ericyi/shapenetcore_partanno_segmentation_benchmark_v0.zip). 
+
+#### Generating dataset
+ 
+After obtaining `.binvox` file and its semantic label, run the 
+following snippet in your favourite terminal application:
+
+```bash
+python utils/data_preprocessing.py semantic_label_path binvox_category_path output_path
+```
+
+For example, `./shapenetcore_partanno_segmentation_benchmark_v0/03001627/` is the semantic label path of the category `chair`. 
+`./ShapeNetVox32/03001627/` (Method 2) is the binvox category path of the category `chair`. Output path is the path where you want to save the 
 generated data.
 
 For more usage about `data_preprocessing.py`, please run:
