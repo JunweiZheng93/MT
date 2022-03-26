@@ -65,9 +65,9 @@ The table below is a brief introduction of [shapenetcore_partanno_segmentation_b
 
 ### Prepare dataset from scratch
 
-#### Obtain `.binvox` files
+#### 1. Obtain `.binvox` files
 
-##### Method 1
+##### Method 1 (only tested in MacOS)
 
 You can voxelize ShapeNetCore by using `utils/obj_to_binvox.py`:
 
@@ -83,17 +83,19 @@ you will get `obj_category_path`, e.g. `~/Download/03467517`.
 
 Download `.binvox` files directly from [here](https://cvgl.stanford.edu/data2/ShapeNetVox32.tgz).
 
-#### Obtain semantic labels for `.binvox` files
+
+#### 2. Obtain semantic labels for `.binvox` files
 
 Download the semantic labels from [here](https://shapenet.cs.stanford.edu/ericyi/shapenetcore_partanno_segmentation_benchmark_v0.zip). 
 
-#### Generating dataset
+
+#### 3. Generating dataset
  
 After obtaining `.binvox` file and its semantic label, run the 
 following snippet in your favourite terminal application:
 
 ```bash
-python utils/data_preprocessing.py semantic_label_path binvox_category_path output_path
+python utils/data_preprocessing.py 32 semantic_label_path binvox_category_path output_path
 ```
 
 For example, `./shapenetcore_partanno_segmentation_benchmark_v0/03001627/` is the semantic label path of the category `chair`. 
