@@ -110,6 +110,8 @@ def get_seperated_part_and_transformation(voxel_grid_label):
         part_max_cord = np.max(part_cord, axis=0)
         part_bbox_hwd = part_max_cord - part_min_cord + 1
         scale_factor = math.floor((resolution / np.max(part_bbox_hwd)) * 100) / 100
+        if scale_factor > 2.:
+            scale_factor = 2.
         part_bbox = np.full((part_bbox_hwd[0], part_bbox_hwd[1], part_bbox_hwd[2]), 0, dtype='uint8')
         for each_cord in (part_cord - part_min_cord):
             part_bbox[each_cord[0], each_cord[1], each_cord[2]] = 1
@@ -155,7 +157,7 @@ def check_file_path(pcd_fp, binvox_fp):
         assert pcd_name in binvox_names
 
 
-def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
+def process_data(resolution, pcd_fp, binvox_fp, output_fp, k=5):
     """
     :param pcd_fp: path of point cloud data. for example, './shapenetcore_partanno_segmentation_benchmark_v0/03001627/'
     :param binvox_fp: path of binvox files. for example, './ShapeNetVox32/03001627/'
@@ -165,6 +167,9 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
     """
 
     # check all stuff
+    redundancy = '.DS_Store'
+    os.system(f'find {pcd_fp} -name "{redundancy}" -delete')
+    os.system(f'find {binvox_fp} -name "{redundancy}" -delete')
     check_file_path(pcd_fp, binvox_fp)
     if not pcd_fp.endswith('/'):
         pcd_fp += '/'
@@ -199,20 +204,22 @@ def process_data(pcd_fp, binvox_fp, output_fp, resolution=32, k=5):
             visualization.save_visualized_img(part, save_dir=os.path.join(shape_dir, f'part{which}.png'))
         pb.update(count+1)
 
+    os.system(f'find {output_fp} -name "{redundancy}" -delete')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='This program is used to convert point cloud and its label to voxel '
                                                  'grid and its label.')
 
     # positional arguments
+    parser.add_argument('resolution', help='resolution to voxelize the point cloud data. should be the same as the resolution of binvox file.')
     parser.add_argument('semantic_label_fp', help='path of the semantic label. For example, \'./shapenetcore_partanno_segmentation_benchmark_v0/03001627/\'')
     parser.add_argument('binvox_fp', help='path of binvox files. For example, \'./ShapeNetVox32/03001627/\'')
     parser.add_argument('output_fp', help='path to save the processed data. For example, \'./datasets/\'')
 
     # optional arguments
-    parser.add_argument('resolution', help='resolution to voxelize the point cloud data. should be the same as the resolution of binvox file.')
     parser.add_argument('-k', default=5, help='knn parameter for the voxelization. default 5')
 
     args = parser.parse_args()
 
-    process_data(args.semantic_label_fp, args.binvox_fp, args.output_fp, int(args.resolution), int(args.k))
+    process_data(int(args.resolution), args.semantic_label_fp, args.binvox_fp, args.output_fp, int(args.k))
