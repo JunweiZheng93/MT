@@ -331,3 +331,12 @@ python utils/mix.py -h
 ```
 
 ### utils/plot_curve.py
+
+This script is used to generate the curve. You need to export the necessary data from tensorboard first and then change the 
+necessary snippets in the script in order to plot the correct curve.
+
+To run `plot_curve.py`, please type:
+
+```bash
+python utils/plot_curve.py
+```

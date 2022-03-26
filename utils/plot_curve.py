@@ -8,7 +8,6 @@ def plot_curve(csv_path, smoothing=0.8):
 
     redundancy = '.DS_Store'
     os.system(f'find {csv_path} -name "{redundancy}" -delete')
-    # plt.style.use('ggplot')
     fig = plt.figure(figsize=(6.8, 5.1))
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
 
