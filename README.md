@@ -109,23 +109,33 @@ python utils/data_preprocessing.py -h
 
 chair: [03001627.zip(681MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03001627.zip?inline=false) <br>
 number of shapes: 3746 <br>
-maximal number of parts: 4
+maximal number of parts: 4 <br>
+solid or not: solid <br>
+resolution: 32
 
 table: [04379243.zip(666MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/04379243.zip?inline=false) <br>
 number of shapes: 5263 <br>
-maximal number of parts: 3
+maximal number of parts: 3 <br>
+solid or not: solid <br>
+resolution: 32
 
 airplane: [02691156.zip(278MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/02691156.zip?inline=false) <br>
 number of shape: 2690 <br>
-maximal number of parts: 4
+maximal number of parts: 4 <br>
+solid or not: solid <br>
+resolution: 32
 
-lamp: [03636649.zip(200MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false) <br>
+lamp: [03636649.zip(87MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false) <br>
 number of shapes: 1546 <br>
-maximal number of parts: 4
+maximal number of parts: 4 <br>
+solid or not: solid <br>
+resolution: 32
 
-guitar: [03467517.zip(43MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false) <br>
+guitar: [03467517.zip(29MB)](https://gitlab.com/JunweiZheng93/shapenetsegvox/-/raw/master/03636649.zip?inline=false) <br>
 number of shapes: 787 <br>
-maximal number of parts: 3
+maximal number of parts: 3 <br>
+solid or not: not solid <br>
+resolution: 32
 
 ### Visualize dataset
 
@@ -218,3 +228,106 @@ For more usage of `quantity_eval.py`, please type:
 python quantity_eval.py -h
 ```
 
+### utils/pick.py
+
+This script is used to check the quality of the reconstruction for a batch of pre-selective shapes by saving the reconstructed
+images under the model file path.
+
+To run `pick.py`, please type:
+
+```bash
+python utils/pick.py model_path
+```
+
+For more usage of `pick.py`, please type:
+
+```bash
+python utils/pick.py -h
+```
+
+### utils/reconstruct.py
+
+This script is used to generate the reconstructed images for ori_model_p2, ori_model_p3, notkeepC_model_p2, notkeepC_model_p3,
+keepC_model_p2, keepC_model_p3 and stack all images together into one image. The images from left to right are the input ground truth,
+reconstruction for ori_model_p2, reconstruction for ori_model_p3, reconstruction for notkeepC_model_p2, reconstruction for notkeepC_model_p3,
+reconstruction for keepC_model_p2, reconstruction for keepC_model_p3
+
+![demo_reconstruction](figure/vis_recon.png)
+
+To run `reconstruct.py`, please type:
+
+```bash
+python utils/reconstruct.py ori_model_p2 ori_model_p3 notkeepC_model_p2 notkeepC_model_p3 keepC_model_p2 keepC_model_p3 --hash_codes code1 code2 code3 --category chair
+```
+
+For more usage of `reconstruct.py`, please type:
+
+```bash
+python utils/reconstruct.py -h
+```
+
+### utils/interpolate.py
+
+This script is used to generate the interpolated images for a trained model and stack all images together into one image. The
+two parameters s1 and s2 should contain two hash codes respectively, e.g. `s1=96929c12a4a6b15a492d9da2668ec34c, 2a56e3e2a6505ec492d9da2668ec34c`,
+`s2=3c408a4ad6d57c3651bc6269fcd1b4c0, 88aec853dcb10d526efa145e9f4a2693`. `s1` means the hash code of the shape on the left side, 
+while `s2` means the shape on the right side. The rest 8 images in the middle in the below demo image are the interpolated shapes.
+
+![demo_interpolation](figure/vis_interpolation.png)
+
+To run `interpolate.py`, please type:
+
+```bash
+python utils/interpolate.py model_path -s1 96929c12a4a6b15a492d9da2668ec34c 2a56e3e2a6505ec492d9da2668ec34c -s2 3c408a4ad6d57c3651bc6269fcd1b4c0 88aec853dcb10d526efa145e9f4a2693 --category chair
+```
+
+For more usage of `interpolate.py`, please type:
+
+```bash
+python utils/interpolate.py -h
+```
+
+### utils/swap.py
+
+This script is used to generate the images for swapping a certain part between two different shapes and stack all images
+together into one image. The first column are the ground_truth images. The second column are the reconstructed image for 
+ori_model. The third column are the swapped images for ori_model. The fourth column are the reconstructed images for attention 
+model. The fifth column are the swapped images for attention model. `which_part` should contain two integers, e.g. 3 and 1, which means 
+the 2nd and 3rd column will swap part 3, while 4th and 5th column will swap part 1. `s1` and `s2` should contain two hash_codes respectively, e.g. 
+`s1=975ea4be01c7488611bc8e8361bc5303, 9d7d7607e1ba099bd98e59dfd5823115`, `s2=297d3e472bf3198fb99cbd993f914184, 1bbe463ba96415aff1783a44a88d6274`. 
+`s1` means the shape in (1st row column, 1st column) and (3rd row, 1st column). `s2` means the shape in (2nd row, 1st column) and (4th row, 1st column).
+
+![demo_swap](figure/vis_swap.png)
+
+To run `swap.py`, please type:
+
+```bash
+python utils/swap.py ori_model attention_model --which_part 3 1 -s1 975ea4be01c7488611bc8e8361bc5303 9d7d7607e1ba099bd98e59dfd5823115 -s2 297d3e472bf3198fb99cbd993f914184 1bbe463ba96415aff1783a44a88d6274 --category chair
+```
+
+For more usage of `swap.py`, please type:
+
+```bash
+python utils/swap.py -h
+```
+
+### utils/mix.py
+
+This script is used to generate the images for mixing all parts randomly among different shapes and stack all images together 
+into one image. The first row are ground truth. The second row are mixed shapes.
+
+![demo_mix](figure/vis_mix.png)
+
+To run `mix.py`, please type:
+
+```bash
+python utils/mix.py model_path -s hash_code1 hash_code2 hash_code3 --seed 6 --category chair
+```
+
+For more usage of `mix.py`, please type:
+
+```bash
+python utils/mix.py -h
+```
+
+### utils/plot_curve.py
