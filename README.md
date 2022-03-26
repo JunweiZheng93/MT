@@ -2,7 +2,6 @@
 
 ## TODOs
 
-- [ ] upload 64^3 dataset
 - [ ] add Dockerfile
 
 ## Platform
@@ -95,7 +94,7 @@ After obtaining `.binvox` file and its semantic label, run the
 following snippet in your favourite terminal application:
 
 ```bash
-python utils/data_preprocessing.py 32 semantic_label_path binvox_category_path output_path
+python utils/data_preprocessing.py voxel_grid_resolution semantic_label_path binvox_category_path output_path
 ```
 
 For example, `./shapenetcore_partanno_segmentation_benchmark_v0/03001627/` is the semantic label path of the category `chair`. 
