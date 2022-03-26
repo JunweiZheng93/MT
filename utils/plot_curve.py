@@ -38,17 +38,6 @@ def plot_curve(csv_path, smoothing=0.8):
         # else:
         #     ax.plot(x, y, label='notKC_woLac')
 
-        # if i == 0:
-        #     ax.plot(x, y, label='0.1/0.1/1/0/1')
-        # elif i == 1:
-        #     ax.plot(x, y, label='1/1/1/0/1')
-        # elif i == 2:
-        #     ax.plot(x, y, label='1/1/1/0/10')
-        # elif i == 3:
-        #     ax.plot(x, y, label='1/1/10/0/1')
-        # else:
-        #     ax.plot(x, y, label='1/1/10/0/10')
-
     ax.xaxis.set_label_coords(1, 0)
     ax.yaxis.set_label_coords(0, 1)
     ax.set_xlabel('step', fontsize=12)
@@ -58,7 +47,6 @@ def plot_curve(csv_path, smoothing=0.8):
     # ax.set_ylabel('shape mIoU', rotation='horizontal', fontsize=12)
     ax.set_ylabel('trans MSE', rotation='horizontal', fontsize=12)
 
-    # ax.legend(loc='lower right') if 'mIoU' in ylabel else ax.legend(loc='upper right')
     ax.legend(loc='best')
 
     plt.show()
@@ -75,4 +63,5 @@ def smooth(scalars, weight):
 
 
 if __name__ == '__main__':
-    plot_curve('/Users/junweizheng/Desktop/curve')
+    path = 'file_path'
+    plot_curve(path)
